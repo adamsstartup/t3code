@@ -250,6 +250,7 @@ import {
 import { type TerminalContextDraft } from "../lib/terminalContext";
 import { collectInlineContextIds } from "../lib/composerContextReferences";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { usePendingProjectScriptLaunchStore } from "../pendingProjectScriptLaunchStore";
 import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { useEnvironmentQueryRefresh } from "../state/query";
 import { useEnvironmentScope } from "~/state/session";
@@ -1951,6 +1952,24 @@ export default function ChatView(props: ChatViewProps) {
     setTerminalUiLaunchContext,
     setThreadError,
   });
+  const pendingScriptLaunch = usePendingProjectScriptLaunchStore((state) => state.pending);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a Start from the Dev servers page lands here after navigation; the runner only exists inside this view, and only the visible view claims it
+  useEffect(() => {
+    if (backgroundThread || pendingScriptLaunch === null || activeThreadRef === null) return;
+    const claimed = usePendingProjectScriptLaunchStore.getState().claim(
+      activeThreadRef,
+      activeProjectScripts.map((script) => script.id),
+    );
+    if (claimed === null) return;
+    const script = activeProjectScripts.find((entry) => entry.id === claimed.scriptId);
+    if (script) void runProjectScriptStable(script);
+  }, [
+    backgroundThread,
+    pendingScriptLaunch,
+    activeThreadRef,
+    activeProjectScripts,
+    runProjectScriptStable,
+  ]);
   const {
     saveProjectScript: saveProjectScriptStable,
     updateProjectScript: updateProjectScriptStable,
