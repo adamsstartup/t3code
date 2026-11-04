@@ -1,4 +1,5 @@
 import "~/index.css";
+import type { ServerThreadGroup } from "@t3tools/client-runtime/state/devServers";
 import {
   EnvironmentId,
   ProjectId,
@@ -9,7 +10,6 @@ import {
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { render } from "../../../test/render";
-import type { ServerThreadGroup } from "./devServers.logic";
 import {
   DevServersView,
   type DevServersEnvironmentSection,
@@ -33,16 +33,14 @@ function server(port: number, pid: number | null): DiscoveredLocalServer {
   };
 }
 
-function group(
-  servers: ReadonlyArray<DiscoveredLocalServer>,
-  threadTitle: string | null = "Build the page",
-): ServerThreadGroup {
+function group(servers: ReadonlyArray<DiscoveredLocalServer>): ServerThreadGroup {
   return {
     key: `${environmentId}:${threadOne}`,
     environmentId,
     threadId: threadOne,
-    threadTitle,
+    threadTitle: "Build the page",
     projectName: "Website",
+    checkoutPath: "/repo",
     rows: servers.map((entry) => ({
       key: `${environmentId}:${entry.pid ?? "nopid"}:${entry.port}`,
       environmentId,
@@ -66,6 +64,7 @@ function startProject(overrides: Partial<StartProjectSection> = {}): StartProjec
     environmentId,
     projectId,
     projectName: "Website",
+    settingsProjectKey: `${environmentId}:${projectId}`,
     scripts: [devScript],
     threads: [
       { threadId: threadOne, title: "Build the page", worktreePath: "/repo/.worktrees/page" },
@@ -82,6 +81,7 @@ function section(
   return {
     environmentId,
     label: "This Mac",
+    loaded: true,
     serverGroups: [],
     devices: [],
     hostLabelById: new Map(),
@@ -137,25 +137,12 @@ describe("DevServersView", () => {
       />,
     );
 
-    await expect.element(screen.getByRole("button", { name: "Start Dev" })).toBeDisabled();
+    await expect
+      .element(screen.getByRole("button", { name: "Start Dev in Website" }))
+      .toBeDisabled();
     await expect
       .element(screen.getByText("Open a thread in this project to start scripts"))
       .toBeVisible();
-  });
-
-  it("starts in the chosen thread", async () => {
-    const viewProps = props([section({ projects: [startProject()] })]);
-    await using screen = await render(<DevServersView {...viewProps} />);
-
-    await screen.getByRole("button", { name: "Start Dev" }).click();
-
-    await vi.waitFor(() =>
-      expect(viewProps.onStartScript).toHaveBeenCalledWith(
-        viewProps.sections[0]?.projects[0],
-        devScript,
-        threadOne,
-      ),
-    );
   });
 
   it("shows the empty state when nothing is running", async () => {
@@ -164,13 +151,19 @@ describe("DevServersView", () => {
     await expect.element(screen.getByText("Nothing running that T3 Code started")).toBeVisible();
   });
 
-  it("labels a server whose thread is not loaded", async () => {
+  it("shows no empty state while a section is still loading", async () => {
     await using screen = await render(
       <DevServersView
-        {...props([section({ serverGroups: [group([server(3000, 123)], null)] })])}
+        {...props([
+          section(),
+          section({ environmentId: EnvironmentId.make("env-b"), loaded: false }),
+        ])}
       />,
     );
 
-    await expect.element(screen.getByText("Thread not loaded")).toBeVisible();
+    await expect.element(screen.getByText("Loading…")).toBeVisible();
+    await expect
+      .element(screen.getByText("Nothing running that T3 Code started"))
+      .not.toBeInTheDocument();
   });
 });

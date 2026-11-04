@@ -1,16 +1,15 @@
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/models";
-import type {
-  DeviceServiceState,
-  DeviceSummary,
-  DiscoveredLocalServer,
-  EnvironmentId,
-  ProjectScript,
-  ThreadId,
+import {
+  isListedThreadLineage,
+  type DeviceServiceState,
+  type DeviceSummary,
+  type DiscoveredLocalServer,
+  type EnvironmentId,
+  type ProjectScript,
+  type ThreadId,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
+
+import { threadKey } from "./entities.ts";
+import type { EnvironmentProject, EnvironmentThreadShell } from "./models.ts";
 
 export interface OwnedServerRow {
   readonly key: string;
@@ -26,13 +25,11 @@ export interface ServerThreadGroup {
   /** Null when the owning thread's shell is not loaded. */
   readonly threadTitle: string | null;
   readonly projectName: string | null;
+  /** The owning thread's worktree, else its project's root; null when neither is known. */
+  readonly checkoutPath: string | null;
   /** Port ascending. */
   readonly rows: ReadonlyArray<OwnedServerRow>;
 }
-
-export const DEV_SERVERS_START_THREAD_BY_PROJECT_KEY = "t3code:dev-servers:start-thread-by-project";
-/** Keyed by `scopedProjectKey(projectRef)`, valued by the thread that last started a script. */
-export const DevServersStartThreadByProjectSchema = Schema.Record(Schema.String, Schema.String);
 
 export const ownedServerRowKey = (environmentId: EnvironmentId, server: DiscoveredLocalServer) =>
   `${environmentId}:${server.pid ?? "nopid"}:${server.port}`;
@@ -84,13 +81,14 @@ export function groupOwnedServers(input: {
       threadId,
       threadTitle: shell?.title ?? null,
       projectName: project?.title ?? null,
-      rows: rows.toSorted((left, right) => left.server.port - right.server.port),
+      checkoutPath: shell?.worktreePath ?? project?.workspaceRoot ?? null,
+      rows: [...rows].sort((left, right) => left.server.port - right.server.port),
     };
     return { group, updatedAt: shell?.updatedAt ?? null };
   });
 
-  return groups
-    .toSorted((left, right) => {
+  return [...groups]
+    .sort((left, right) => {
       if (left.updatedAt !== null && right.updatedAt !== null) {
         return right.updatedAt.localeCompare(left.updatedAt);
       }
@@ -110,6 +108,23 @@ export function bootedMachineDevices(state: DeviceServiceState): ReadonlyArray<D
   return state.devices.filter(
     (device) => device.booted && !device.physical && machineHostIds.has(device.hostId),
   );
+}
+
+/** Threads a script can start in: listed, not archived, not hidden by a tag filter; newest first. */
+export function startCandidateThreads(
+  threads: ReadonlyArray<EnvironmentThreadShell>,
+  hiddenThreadKeys: ReadonlySet<string>,
+): ReadonlyArray<EnvironmentThreadShell> {
+  return threads
+    .filter(
+      (thread) =>
+        thread.archivedAt === null &&
+        isListedThreadLineage(thread.lineage) &&
+        !hiddenThreadKeys.has(
+          threadKey({ environmentId: thread.environmentId, threadId: thread.id }),
+        ),
+    )
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 export function resolveStartTargetThread(input: {
