@@ -69,6 +69,7 @@ import {
   MessageSquareIcon,
   PaletteIcon,
   RotateCcwIcon,
+  ServerIcon,
   SettingsIcon,
   MonitorIcon,
   PinIcon,
@@ -1604,6 +1605,26 @@ function OpenCommandPaletteDialog(props: {
     shortcutCommand: "usage.open",
     run: async () => {
       await navigate({ to: "/usage" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:dev-servers",
+    searchTerms: [
+      "dev servers",
+      "servers",
+      "ports",
+      "localhost",
+      "simulator",
+      "emulator",
+      "stop",
+      "kill",
+    ],
+    title: "Open dev servers",
+    icon: <ServerIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/dev-servers" });
     },
   });
 
