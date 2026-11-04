@@ -18,11 +18,11 @@ import {
 } from "@t3tools/contracts";
 import { resolveProjectScripts } from "@t3tools/shared/projectScripts";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffectEvent, useLayoutEffect, useState } from "react";
 
 import { isElectron } from "~/env";
+import { useLocalStorage, writeLocalStorageValue } from "~/hooks/useLocalStorage";
 import { useEnvironmentSettings } from "~/hooks/useSettings";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { usePendingProjectScriptLaunchStore } from "~/pendingProjectScriptLaunchStore";
 import { useDiscoveredPortsState } from "~/portDiscoveryState";
 import {
@@ -47,41 +47,111 @@ import {
   DEV_SERVERS_START_THREAD_BY_PROJECT_KEY,
   DevServersStartThreadByProjectSchema,
   groupOwnedServers,
+  ownedServerRowKey,
   resolveStartTargetThread,
   sortScriptsForStart,
 } from "./devServers.logic";
 import {
-  DevServersEmptyState,
-  DevServersSectionBody,
+  DevServersView,
   devServersDeviceKey,
-  sectionHasRunning,
   type DevServersEnvironmentSection,
   type StartProjectSection,
 } from "./DevServersView";
 
-export function DevServersPage() {
-  const { environments } = useEnvironments();
-  const loaded = environments.filter((environment) => environment.serverConfig !== null);
-  const [startThreadByProject, setStartThreadByProject] = useLocalStorage(
+function reportFailure(title: string, error: unknown) {
+  toastManager.add(
+    stackedThreadToast({
+      type: "error",
+      title,
+      description: error instanceof Error ? error.message : String(error),
+    }),
+  );
+}
+
+function rememberStartThread(projectKey: string, threadId: ThreadId) {
+  writeLocalStorageValue(
     DEV_SERVERS_START_THREAD_BY_PROJECT_KEY,
+    (current) => ({ ...current, [projectKey]: threadId }),
     {},
     DevServersStartThreadByProjectSchema,
   );
-  const [runningEnvironmentIds, setRunningEnvironmentIds] = useState<ReadonlySet<EnvironmentId>>(
-    () => new Set(),
-  );
+}
 
-  const reportRunning = (environmentId: EnvironmentId, running: boolean) =>
-    setRunningEnvironmentIds((current) => {
-      if (current.has(environmentId) === running) return current;
-      const next = new Set(current);
-      if (running) next.add(environmentId);
+export function DevServersPage() {
+  const navigate = useNavigate();
+  const { environments } = useEnvironments();
+  const loaded = environments.filter((environment) => environment.serverConfig !== null);
+  const [sectionById, setSectionById] = useState<
+    ReadonlyMap<EnvironmentId, DevServersEnvironmentSection>
+  >(() => new Map());
+  const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const stopServer = useAtomCommand(previewEnvironment.stopLocalServer, {
+    label: "dev servers stop",
+  });
+  const shutdownDevice = useAtomCommand(deviceEnvironment.shutdown);
+
+  const sections = loaded.flatMap((environment) => {
+    const section = sectionById.get(environment.environmentId);
+    return section ? [section] : [];
+  });
+
+  const reportSection = (
+    environmentId: EnvironmentId,
+    section: DevServersEnvironmentSection | null,
+  ) =>
+    setSectionById((current) => {
+      if ((current.get(environmentId) ?? null) === section) return current;
+      const next = new Map(current);
+      if (section) next.set(environmentId, section);
       else next.delete(environmentId);
       return next;
     });
 
-  const rememberStartThread = (projectKey: string, threadId: ThreadId) =>
-    setStartThreadByProject((current) => ({ ...current, [projectKey]: threadId }));
+  const runBusy = async <T,>(key: string, action: () => Promise<T>) => {
+    setBusyKeys((current) => new Set(current).add(key));
+    try {
+      return await action();
+    } finally {
+      setBusyKeys((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const stop = async (environmentId: EnvironmentId, server: DiscoveredLocalServer) => {
+    const { pid } = server;
+    const key = ownedServerRowKey(environmentId, server);
+    if (pid === null || busyKeys.has(key)) return;
+    const result = await runBusy(key, () =>
+      stopServer({ environmentId, input: { pid, port: server.port } }),
+    );
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      reportFailure("Could not stop server", squashAtomCommandFailure(result));
+    }
+  };
+
+  const shutdown = async (environmentId: EnvironmentId, device: DeviceSummary) => {
+    const key = devServersDeviceKey(environmentId, device);
+    if (busyKeys.has(key)) return;
+    const result = await runBusy(key, () =>
+      shutdownDevice({
+        environmentId,
+        input: { hostId: device.hostId, deviceId: device.id, platform: device.platform },
+      }),
+    );
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      reportFailure("Could not shut down device", squashAtomCommandFailure(result));
+    }
+  };
+
+  const start = (project: StartProjectSection, script: ProjectScript, threadId: ThreadId) => {
+    const threadRef = scopeThreadRef(project.environmentId, threadId);
+    rememberStartThread(project.key, threadId);
+    usePendingProjectScriptLaunchStore.getState().request({ threadRef, scriptId: script.id });
+    void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(threadRef) });
+  };
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -94,19 +164,25 @@ export function DevServersPage() {
           </WorkspaceBreadcrumb>
         </WorkspacePageHeader>
         <div className="topbar-scroll-fade scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto">
-          <WorkspacePageContainer width="expanded" className="min-h-full gap-8">
-            {runningEnvironmentIds.size === 0 ? <DevServersEmptyState /> : null}
+          <WorkspacePageContainer width="expanded" className="min-h-full">
             {loaded.map((environment) => (
-              <DevServersEnvironment
+              <DevServersEnvironmentSource
                 key={environment.environmentId}
                 environmentId={environment.environmentId}
                 label={environment.label}
-                showLabel={loaded.length > 1}
-                startThreadByProject={startThreadByProject}
-                onRememberStartThread={rememberStartThread}
-                onRunningChange={reportRunning}
+                onSection={reportSection}
               />
             ))}
+            <DevServersView
+              sections={sections}
+              busyKeys={busyKeys}
+              onStopServer={(environmentId, server) => void stop(environmentId, server)}
+              onShutdownDevice={(environmentId, device) => void shutdown(environmentId, device)}
+              onStartScript={start}
+              onSelectStartThread={(project, threadId) =>
+                rememberStartThread(project.key, threadId)
+              }
+            />
           </WorkspacePageContainer>
         </div>
       </div>
@@ -114,26 +190,16 @@ export function DevServersPage() {
   );
 }
 
-function reportFailure(title: string, error: unknown) {
-  toastManager.add(
-    stackedThreadToast({
-      type: "error",
-      title,
-      description: error instanceof Error ? error.message : String(error),
-    }),
-  );
-}
-
-function DevServersEnvironment(props: {
+/** Runs one environment's hooks and reports its section to the page; renders nothing. */
+function DevServersEnvironmentSource(props: {
   readonly environmentId: EnvironmentId;
   readonly label: string;
-  readonly showLabel: boolean;
-  readonly startThreadByProject: Readonly<Record<string, string>>;
-  readonly onRememberStartThread: (projectKey: string, threadId: ThreadId) => void;
-  readonly onRunningChange: (environmentId: EnvironmentId, running: boolean) => void;
+  readonly onSection: (
+    environmentId: EnvironmentId,
+    section: DevServersEnvironmentSection | null,
+  ) => void;
 }) {
-  const { environmentId } = props;
-  const navigate = useNavigate();
+  const { environmentId, label } = props;
   const { servers } = useDiscoveredPortsState(environmentId);
   const { state: deviceState, loaded: deviceStateLoaded } = useDeviceState(environmentId);
   useAtomMount(
@@ -141,8 +207,8 @@ function DevServersEnvironment(props: {
       ? deviceHostProbeAtom(environmentId)
       : NO_DEVICE_PROBE_ATOM,
   );
-  const projects = useProjects().filter((project) => project.environmentId === environmentId);
-  const threadShells = useThreadShells().filter((thread) => thread.environmentId === environmentId);
+  const allProjects = useProjects();
+  const allThreadShells = useThreadShells();
   const settings = useEnvironmentSettings(environmentId);
   const canStopServers = useAtomValue(
     previewEnvironment.stopLocalServer.permissionAtom(environmentId),
@@ -151,13 +217,14 @@ function DevServersEnvironment(props: {
     useEnvironment(environmentId)?.serverConfig?.environment.capabilities.localServerStop === true;
   const canShutdown = useAtomValue(deviceEnvironment.shutdown.permissionAtom(environmentId));
   const canStart = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
-  const stopServer = useAtomCommand(previewEnvironment.stopLocalServer, {
-    label: "dev servers stop",
-  });
-  const shutdownDevice = useAtomCommand(deviceEnvironment.shutdown);
-  const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const [startThreadByProject] = useLocalStorage(
+    DEV_SERVERS_START_THREAD_BY_PROJECT_KEY,
+    {},
+    DevServersStartThreadByProjectSchema,
+  );
 
-  const serverGroups = groupOwnedServers({ environmentId, servers, threadShells, projects });
+  const projects = allProjects.filter((project) => project.environmentId === environmentId);
+  const threadShells = allThreadShells.filter((thread) => thread.environmentId === environmentId);
   const startProjects = projects.flatMap((project): ReadonlyArray<StartProjectSection> => {
     const scripts = sortScriptsForStart(resolveProjectScripts(settings, project));
     if (scripts.length === 0) return [];
@@ -165,7 +232,7 @@ function DevServersEnvironment(props: {
     const threads = threadShells
       .filter((thread) => thread.projectId === project.id && thread.archivedAt === null)
       .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-    const remembered = threads.find((thread) => thread.id === props.startThreadByProject[key]);
+    const remembered = threads.find((thread) => thread.id === startThreadByProject[key]);
     const target = resolveStartTargetThread({
       threads,
       rememberedThreadId: remembered?.id ?? null,
@@ -188,8 +255,8 @@ function DevServersEnvironment(props: {
   });
   const section: DevServersEnvironmentSection = {
     environmentId,
-    label: props.label,
-    serverGroups,
+    label,
+    serverGroups: groupOwnedServers({ environmentId, servers, threadShells, projects }),
     devices: bootedMachineDevices(deviceState),
     hostLabelById: new Map(deviceState.hosts.map((host) => [host.id, host.label])),
     canStop: canStopServers && supportsStop,
@@ -197,76 +264,13 @@ function DevServersEnvironment(props: {
     canStart,
     projects: startProjects,
   };
-  const running = sectionHasRunning(section);
 
-  const reportRunning = useEffectEvent((value: boolean) =>
-    props.onRunningChange(environmentId, value),
-  );
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- each environment's hooks live in this child, so the page learns whether anything runs here to decide on the shared empty state
-  useEffect(() => {
-    reportRunning(running);
-    return () => reportRunning(false);
-  }, [running]);
+  const reportSection = useEffectEvent(props.onSection);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- each environment's hooks live in this child, so its section reaches the page's single view here, before paint
+  useLayoutEffect(() => {
+    reportSection(environmentId, section);
+    return () => reportSection(environmentId, null);
+  }, [environmentId, section]);
 
-  const runBusy = async <T,>(key: string, action: () => Promise<T>) => {
-    setBusyKeys((current) => new Set(current).add(key));
-    try {
-      return await action();
-    } finally {
-      setBusyKeys((current) => {
-        const next = new Set(current);
-        next.delete(key);
-        return next;
-      });
-    }
-  };
-
-  const stop = async (server: DiscoveredLocalServer) => {
-    const { pid } = server;
-    const row = serverGroups
-      .flatMap((group) => group.rows)
-      .find((entry) => entry.server === server);
-    if (pid === null || !row || busyKeys.has(row.key)) return;
-    const result = await runBusy(row.key, () =>
-      stopServer({ environmentId, input: { pid, port: server.port } }),
-    );
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      reportFailure("Could not stop server", squashAtomCommandFailure(result));
-    }
-  };
-
-  const shutdown = async (device: DeviceSummary) => {
-    const key = devServersDeviceKey(environmentId, device);
-    if (busyKeys.has(key)) return;
-    const result = await runBusy(key, () =>
-      shutdownDevice({
-        environmentId,
-        input: { hostId: device.hostId, deviceId: device.id, platform: device.platform },
-      }),
-    );
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      reportFailure("Could not shut down device", squashAtomCommandFailure(result));
-    }
-  };
-
-  const start = (project: StartProjectSection, script: ProjectScript, threadId: ThreadId) => {
-    const threadRef = scopeThreadRef(project.environmentId, threadId);
-    props.onRememberStartThread(project.key, threadId);
-    usePendingProjectScriptLaunchStore.getState().request({ threadRef, scriptId: script.id });
-    void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(threadRef) });
-  };
-
-  return (
-    <DevServersSectionBody
-      section={section}
-      showLabel={props.showLabel}
-      busyKeys={busyKeys}
-      onStopServer={(_, server) => void stop(server)}
-      onShutdownDevice={(_, device) => void shutdown(device)}
-      onStartScript={start}
-      onSelectStartThread={(project, threadId) =>
-        props.onRememberStartThread(project.key, threadId)
-      }
-    />
-  );
+  return null;
 }

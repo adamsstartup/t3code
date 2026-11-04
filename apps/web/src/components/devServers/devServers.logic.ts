@@ -34,6 +34,9 @@ export const DEV_SERVERS_START_THREAD_BY_PROJECT_KEY = "t3code:dev-servers:start
 /** Keyed by `scopedProjectKey(projectRef)`, valued by the thread that last started a script. */
 export const DevServersStartThreadByProjectSchema = Schema.Record(Schema.String, Schema.String);
 
+export const ownedServerRowKey = (environmentId: EnvironmentId, server: DiscoveredLocalServer) =>
+  `${environmentId}:${server.pid ?? "nopid"}:${server.port}`;
+
 function serverOwner(
   server: DiscoveredLocalServer,
 ): { readonly threadId: ThreadId; readonly kind: OwnedServerRow["ownerKind"] } | null {
@@ -54,7 +57,7 @@ export function groupOwnedServers(input: {
     const owner = serverOwner(server);
     if (!owner) continue;
     const row: OwnedServerRow = {
-      key: `${environmentId}:${server.pid ?? "nopid"}:${server.port}`,
+      key: ownedServerRowKey(environmentId, server),
       environmentId,
       server,
       ownerKind: owner.kind,

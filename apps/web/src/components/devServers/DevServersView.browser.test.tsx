@@ -112,15 +112,22 @@ describe("DevServersView", () => {
     );
 
     await expect.element(screen.getByText("localhost:3001")).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Stop localhost:/ }).elements()).toHaveLength(1);
     await expect.element(screen.getByRole("button", { name: "Stop localhost:3000" })).toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Stop localhost:3001" }))
+      .not.toBeInTheDocument();
 
     await screen.rerender(
       <DevServersView {...props([section({ serverGroups: groups, canStop: false })])} />,
     );
 
+    await expect
+      .element(screen.getByRole("button", { name: "Stop localhost:3000" }))
+      .not.toBeInTheDocument();
     await expect.element(screen.getByText("localhost:3000")).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Stop localhost:/ }).elements()).toHaveLength(0);
+    await expect
+      .element(screen.getByRole("button", { name: "Stop localhost:3001" }))
+      .not.toBeInTheDocument();
   });
 
   it("disables Start without a target thread and shows the hint", async () => {
@@ -142,10 +149,12 @@ describe("DevServersView", () => {
 
     await screen.getByRole("button", { name: "Start Dev" }).click();
 
-    expect(viewProps.onStartScript).toHaveBeenCalledWith(
-      viewProps.sections[0]?.projects[0],
-      devScript,
-      threadOne,
+    await vi.waitFor(() =>
+      expect(viewProps.onStartScript).toHaveBeenCalledWith(
+        viewProps.sections[0]?.projects[0],
+        devScript,
+        threadOne,
+      ),
     );
   });
 
