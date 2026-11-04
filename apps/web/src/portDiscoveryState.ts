@@ -15,6 +15,7 @@ const EMPTY_PORTS: ReadonlyArray<DiscoveredLocalServer> = Object.freeze([]);
 interface DiscoveredPortsState {
   readonly servers: ReadonlyArray<DiscoveredLocalServer>;
   readonly configuredUrlProbing: boolean;
+  readonly loaded: boolean;
 }
 
 export function boundConfiguredLocalServerUrls(
@@ -63,6 +64,7 @@ export function useDiscoveredPortsState(
   return {
     servers: query.data?.servers ?? EMPTY_PORTS,
     configuredUrlProbing: query.data?.configuredUrlProbing === true,
+    loaded: query.data !== null,
   };
 }
 
