@@ -67,6 +67,8 @@ interface DevServersActions {
 
 export interface DevServersViewProps extends DevServersActions {
   readonly sections: ReadonlyArray<DevServersEnvironmentSection>;
+  /** False while the environment list is still being discovered. Defaults to true. */
+  readonly environmentsReady?: boolean;
 }
 
 export const devServersDeviceKey = (
@@ -78,14 +80,17 @@ const sectionHasRunning = (section: DevServersEnvironmentSection) =>
   section.serverGroups.length > 0 || section.devices.length > 0;
 
 export function DevServersView(props: DevServersViewProps) {
-  const { sections, ...actions } = props;
-  const allLoaded = sections.length > 0 && sections.every((section) => section.loaded);
+  const { sections, environmentsReady = true, ...actions } = props;
+  const settled =
+    sections.length === 0 ? environmentsReady : sections.every((section) => section.loaded);
   return (
     <div className="flex flex-col gap-8">
-      {sections.some(sectionHasRunning) ? null : allLoaded ? (
-        <DevServersEmptyState />
-      ) : (
+      {sections.some(sectionHasRunning) ? null : !settled ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
+      ) : sections.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No environment is connected.</p>
+      ) : (
+        <DevServersEmptyState />
       )}
       {sections.map((section) => (
         <DevServersSectionBody

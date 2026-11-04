@@ -64,7 +64,7 @@ export function useDiscoveredPortsState(
   return {
     servers: query.data?.servers ?? EMPTY_PORTS,
     configuredUrlProbing: query.data?.configuredUrlProbing === true,
-    loaded: query.data !== null,
+    loaded: query.data !== null || query.error !== null,
   };
 }
 
