@@ -69,7 +69,7 @@ export const devServersDeviceKey = (
   device: Pick<DeviceSummary, "hostId" | "id">,
 ) => `${environmentId}\u0000${device.hostId}\u0000${device.id}`;
 
-export const sectionHasRunning = (section: DevServersEnvironmentSection) =>
+const sectionHasRunning = (section: DevServersEnvironmentSection) =>
   section.serverGroups.length > 0 || section.devices.length > 0;
 
 export function DevServersView(props: DevServersViewProps) {
@@ -89,7 +89,7 @@ export function DevServersView(props: DevServersViewProps) {
   );
 }
 
-export function DevServersEmptyState() {
+function DevServersEmptyState() {
   return (
     <Empty size="compact" className="min-h-48 flex-none">
       <EmptyHeader>
@@ -105,7 +105,7 @@ export function DevServersEmptyState() {
   );
 }
 
-export function DevServersSectionBody(
+function DevServersSectionBody(
   props: DevServersActions & {
     readonly section: DevServersEnvironmentSection;
     readonly showLabel: boolean;
