@@ -1,7 +1,3 @@
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/models";
 import {
   EnvironmentId,
   ProjectId,
@@ -19,7 +15,10 @@ import {
   groupOwnedServers,
   resolveStartTargetThread,
   sortScriptsForStart,
-} from "./devServers.logic";
+  startCandidateThreads,
+} from "./devServers.ts";
+import { threadKey } from "./entities.ts";
+import type { EnvironmentProject, EnvironmentThreadShell } from "./models.ts";
 
 const environmentId = EnvironmentId.make("env-a");
 const projectId = ProjectId.make("project-1");
@@ -58,6 +57,8 @@ function thread(
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     archivedAt: null,
+    worktreePath: null,
+    lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: input.id },
     ...input,
   } as EnvironmentThreadShell;
 }
@@ -119,7 +120,11 @@ describe("groupOwnedServers", () => {
         terminalServer(threadA, 4000),
       ],
       threadShells: [
-        thread({ id: threadA, updatedAt: "2026-01-02T00:00:00.000Z" }),
+        thread({
+          id: threadA,
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          worktreePath: "/repo/.worktrees/a",
+        }),
         thread({ id: threadB, updatedAt: "2026-01-01T00:00:00.000Z" }),
       ],
       projects: [project()],
@@ -134,6 +139,8 @@ describe("groupOwnedServers", () => {
     expect(groupA?.projectName).toBe("My Project");
     expect(groupA?.rows.map((row) => row.server.port)).toEqual([4000, 5173]);
     expect(groupA?.rows.map((row) => row.ownerKind)).toEqual(["terminal", "agent"]);
+    expect(groupA?.checkoutPath).toBe("/repo/.worktrees/a");
+    expect(groupB?.checkoutPath).toBe("/repo");
     expect(groupB?.rows.map((row) => row.server.port)).toEqual([3000]);
     expect(groupB?.rows[0]?.key).toBe(`${environmentId}:13000:3000`);
   });
@@ -155,6 +162,7 @@ describe("groupOwnedServers", () => {
     expect(groups.map((group) => group.threadId)).toEqual([threadA, unloadedY, unloadedZ]);
     expect(groups[1]?.threadTitle).toBeNull();
     expect(groups[1]?.projectName).toBeNull();
+    expect(groups[1]?.checkoutPath).toBeNull();
     expect(groups[2]?.rows.map((row) => row.server.port)).toEqual([3001]);
   });
 
@@ -232,6 +240,44 @@ describe("bootedMachineDevices", () => {
       "local-booted",
       "ssh-booted",
     ]);
+  });
+});
+
+describe("startCandidateThreads", () => {
+  it("keeps listed, live, visible threads, newest first", () => {
+    const older = thread({ id: threadA, updatedAt: "2026-01-01T00:00:00.000Z" });
+    const newer = thread({ id: threadB, updatedAt: "2026-01-02T00:00:00.000Z" });
+    const subagent = thread({
+      id: ThreadId.make("thread-subagent"),
+      updatedAt: "2026-01-03T00:00:00.000Z",
+      lineage: { parentThreadId: threadA, relationshipToParent: "subagent", rootThreadId: threadA },
+    });
+    const sideChat = thread({
+      id: ThreadId.make("thread-side-chat"),
+      lineage: {
+        parentThreadId: threadA,
+        relationshipToParent: null,
+        rootThreadId: threadA,
+        sideChat: true,
+      },
+    });
+    const hidden = thread({ id: ThreadId.make("thread-hidden") });
+    const archived = thread({
+      id: ThreadId.make("thread-archived"),
+      archivedAt: "2026-01-04T00:00:00.000Z",
+    });
+    const fork = thread({
+      id: ThreadId.make("thread-fork"),
+      updatedAt: "2025-12-31T00:00:00.000Z",
+      lineage: { parentThreadId: threadA, relationshipToParent: "fork", rootThreadId: threadA },
+    });
+
+    expect(
+      startCandidateThreads(
+        [older, subagent, sideChat, hidden, archived, newer, fork],
+        new Set([threadKey({ environmentId, threadId: hidden.id })]),
+      ).map((entry) => entry.id),
+    ).toEqual([threadB, threadA, fork.id]);
   });
 });
 

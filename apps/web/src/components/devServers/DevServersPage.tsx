@@ -5,6 +5,18 @@ import {
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
 import {
+  bootedMachineDevices,
+  groupOwnedServers,
+  ownedServerRowKey,
+  resolveStartTargetThread,
+  sortScriptsForStart,
+  startCandidateThreads,
+} from "@t3tools/client-runtime/state/devServers";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  selectProjectGroupingSettings,
+} from "@t3tools/client-runtime/state/project-grouping";
+import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
@@ -22,7 +34,7 @@ import { useEffectEvent, useLayoutEffect, useState } from "react";
 
 import { isElectron } from "~/env";
 import { useLocalStorage, writeLocalStorageValue } from "~/hooks/useLocalStorage";
-import { useEnvironmentSettings } from "~/hooks/useSettings";
+import { useClientSettings, useEnvironmentSettings } from "~/hooks/useSettings";
 import { usePendingProjectScriptLaunchStore } from "~/pendingProjectScriptLaunchStore";
 import { useDiscoveredPortsState } from "~/portDiscoveryState";
 import {
@@ -31,7 +43,7 @@ import {
   NO_DEVICE_PROBE_ATOM,
   useDeviceState,
 } from "~/state/device";
-import { useProjects, useThreadShells } from "~/state/entities";
+import { useHiddenThreadKeys, useProjects, useThreadShells } from "~/state/entities";
 import { useEnvironment, useEnvironments } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentScope } from "~/state/session";
@@ -43,14 +55,9 @@ import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "../WorkspaceBreadc
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import {
-  bootedMachineDevices,
   DEV_SERVERS_START_THREAD_BY_PROJECT_KEY,
   DevServersStartThreadByProjectSchema,
-  groupOwnedServers,
-  ownedServerRowKey,
-  resolveStartTargetThread,
-  sortScriptsForStart,
-} from "./devServers.logic";
+} from "./devServersStorage";
 import {
   DevServersView,
   devServersDeviceKey,
@@ -198,7 +205,7 @@ function DevServersEnvironmentSource(props: {
   ) => void;
 }) {
   const { environmentId, label } = props;
-  const { servers } = useDiscoveredPortsState(environmentId);
+  const { servers, loaded: serversLoaded } = useDiscoveredPortsState(environmentId);
   const { state: deviceState, loaded: deviceStateLoaded } = useDeviceState(environmentId);
   useAtomMount(
     deviceStateLoaded && deviceState.hostStatus !== "disabled"
@@ -207,6 +214,8 @@ function DevServersEnvironmentSource(props: {
   );
   const allProjects = useProjects();
   const allThreadShells = useThreadShells();
+  const hiddenThreadKeys = useHiddenThreadKeys();
+  const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const settings = useEnvironmentSettings(environmentId);
   const canStopServers = useAtomValue(
     previewEnvironment.stopLocalServer.permissionAtom(environmentId),
@@ -224,16 +233,17 @@ function DevServersEnvironmentSource(props: {
   const projects = allProjects.filter((project) => project.environmentId === environmentId);
   const threadShells = allThreadShells.filter((thread) => thread.environmentId === environmentId);
   const startProjects = projects.flatMap((project): ReadonlyArray<StartProjectSection> => {
+    if (project.isScratch === true) return [];
     const scripts = sortScriptsForStart(resolveProjectScripts(settings, project));
     if (scripts.length === 0) return [];
     const key = scopedProjectKey(scopeProjectRef(environmentId, project.id));
-    const threads = threadShells
-      .filter((thread) => thread.projectId === project.id && thread.archivedAt === null)
-      .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-    const remembered = threads.find((thread) => thread.id === startThreadByProject[key]);
+    const threads = startCandidateThreads(
+      threadShells.filter((thread) => thread.projectId === project.id),
+      hiddenThreadKeys,
+    );
     const target = resolveStartTargetThread({
       threads,
-      rememberedThreadId: remembered?.id ?? null,
+      rememberedThreadId: startThreadByProject[key] ?? null,
     });
     return [
       {
@@ -241,6 +251,7 @@ function DevServersEnvironmentSource(props: {
         environmentId,
         projectId: project.id,
         projectName: project.title,
+        settingsProjectKey: deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings),
         scripts,
         threads: threads.map((thread) => ({
           threadId: thread.id,
@@ -254,6 +265,7 @@ function DevServersEnvironmentSource(props: {
   const section: DevServersEnvironmentSection = {
     environmentId,
     label,
+    loaded: serversLoaded && deviceStateLoaded,
     serverGroups: groupOwnedServers({ environmentId, servers, threadShells, projects }),
     devices: bootedMachineDevices(deviceState),
     hostLabelById: new Map(deviceState.hosts.map((host) => [host.id, host.label])),
