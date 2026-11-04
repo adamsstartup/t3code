@@ -19,8 +19,6 @@ turn port discovery off.
 hosts the environment and on your [SSH device hosts](./devices.md#ssh-device-hosts). Physical
 devices are not listed.
 
-When more than one environment is connected, each environment has its own section.
-
 ## Stop a server or shut down a device
 
 **Stop** ends the server's job and keeps the thread, its terminal, and T3 Code running. Stop needs
@@ -29,8 +27,8 @@ simulator or emulator.
 
 ## Start a project script
 
-**Start** lists each project's scripts. Choose the thread to run them in from the project's
-thread menu. It lists the project's threads that are not archived, most recently active first,
+**Start** lists each project's scripts. Add scripts to a project in **Settings → Projects**, which
+**Edit scripts** opens. Choose the thread to run them in from the project's thread menu. It lists the project's threads that are not archived, most recently active first,
 shows each worktree thread's path, and remembers the thread you last chose for each project.
 
 Choose **Start** on a script to open that thread and run the script in its terminal drawer. The
