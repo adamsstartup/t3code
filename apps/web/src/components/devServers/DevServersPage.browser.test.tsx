@@ -204,14 +204,14 @@ describe("DevServersPage", () => {
     await page.getByRole("option", { name: "Fix the bug" }).click();
     await screen.getByRole("button", { name: "Start Dev in Website" }).click();
 
-    await vi.waitFor(() =>
+    await vi.waitFor(() => {
       expect(usePendingProjectScriptLaunchStore.getState().pending).toEqual({
         threadRef: scopeThreadRef(environmentId, threadB),
         scriptId: devScript.id,
-      }),
-    );
-    expect(
-      JSON.parse(localStorage.getItem(DEV_SERVERS_START_THREAD_BY_PROJECT_KEY) ?? "{}"),
-    ).toEqual({ [projectKey]: threadB });
+      });
+      expect(
+        JSON.parse(localStorage.getItem(DEV_SERVERS_START_THREAD_BY_PROJECT_KEY) ?? "{}"),
+      ).toEqual({ [projectKey]: threadB });
+    });
   });
 });
