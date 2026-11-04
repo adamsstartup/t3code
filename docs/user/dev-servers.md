@@ -28,8 +28,10 @@ simulator or emulator.
 ## Start a project script
 
 **Start** lists each project's scripts. Add scripts to a project in **Settings → Projects**, which
-**Edit scripts** opens. Choose the thread to run them in from the project's thread menu. It lists the project's threads that are not archived, most recently active first,
-shows each worktree thread's path, and remembers the thread you last chose for each project.
+**Edit scripts** opens. Choose the thread to run them in from the project's thread menu. It lists
+the project's open threads, most recently active first, leaving out archived threads, subagents,
+side chats, and threads a tag filter hides. It shows each worktree thread's path and remembers the
+thread you last chose for each project.
 
 Choose **Start** on a script to open that thread and run the script in its terminal drawer. The
 script runs in that thread's checkout, so a worktree thread runs it in its worktree. When a

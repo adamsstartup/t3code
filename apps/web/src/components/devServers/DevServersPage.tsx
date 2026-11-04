@@ -86,7 +86,7 @@ function rememberStartThread(projectKey: string, threadId: ThreadId) {
 
 export function DevServersPage() {
   const navigate = useNavigate();
-  const { environments } = useEnvironments();
+  const { environments, isReady } = useEnvironments();
   const loaded = environments.filter((environment) => environment.serverConfig !== null);
   const [sectionById, setSectionById] = useState<
     ReadonlyMap<EnvironmentId, DevServersEnvironmentSection>
@@ -180,6 +180,7 @@ export function DevServersPage() {
             ))}
             <DevServersView
               sections={sections}
+              environmentsReady={isReady}
               busyKeys={busyKeys}
               onStopServer={(environmentId, server) => void stop(environmentId, server)}
               onShutdownDevice={(environmentId, device) => void shutdown(environmentId, device)}
@@ -206,7 +207,11 @@ function DevServersEnvironmentSource(props: {
 }) {
   const { environmentId, label } = props;
   const { servers, loaded: serversLoaded } = useDiscoveredPortsState(environmentId);
-  const { state: deviceState, loaded: deviceStateLoaded } = useDeviceState(environmentId);
+  const {
+    state: deviceState,
+    loaded: deviceStateLoaded,
+    error: deviceStateError,
+  } = useDeviceState(environmentId);
   useAtomMount(
     deviceStateLoaded && deviceState.hostStatus !== "disabled"
       ? deviceHostProbeAtom(environmentId)
@@ -265,7 +270,7 @@ function DevServersEnvironmentSource(props: {
   const section: DevServersEnvironmentSection = {
     environmentId,
     label,
-    loaded: serversLoaded && deviceStateLoaded,
+    loaded: serversLoaded && (deviceStateLoaded || deviceStateError !== null),
     serverGroups: groupOwnedServers({ environmentId, servers, threadShells, projects }),
     devices: bootedMachineDevices(deviceState),
     hostLabelById: new Map(deviceState.hosts.map((host) => [host.id, host.label])),
