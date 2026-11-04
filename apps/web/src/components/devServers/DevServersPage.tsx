@@ -107,17 +107,15 @@ export function DevServersPage() {
       return next;
     });
 
-  const runBusy = async <T,>(key: string, action: () => Promise<T>) => {
+  const runBusy = <T,>(key: string, action: () => Promise<T>) => {
     setBusyKeys((current) => new Set(current).add(key));
-    try {
-      return await action();
-    } finally {
+    return action().finally(() =>
       setBusyKeys((current) => {
         const next = new Set(current);
         next.delete(key);
         return next;
-      });
-    }
+      }),
+    );
   };
 
   const stop = async (environmentId: EnvironmentId, server: DiscoveredLocalServer) => {
