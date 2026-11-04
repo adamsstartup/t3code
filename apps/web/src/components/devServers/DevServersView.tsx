@@ -1,3 +1,4 @@
+import type { ServerThreadGroup } from "@t3tools/client-runtime/state/devServers";
 import type {
   DeviceSummary,
   DiscoveredLocalServer,
@@ -6,6 +7,7 @@ import type {
   ProjectScript,
   ThreadId,
 } from "@t3tools/contracts";
+import { Link } from "@tanstack/react-router";
 import { LoaderCircleIcon, PlayIcon, PowerIcon, ServerIcon, SquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -14,7 +16,6 @@ import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import type { ServerThreadGroup } from "./devServers.logic";
 
 export interface StartThreadOption {
   readonly threadId: ThreadId;
@@ -28,6 +29,8 @@ export interface StartProjectSection {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
   readonly projectName: string;
+  /** Logical project key the project settings page selects by. */
+  readonly settingsProjectKey: string;
   /** Already sorted for starting. */
   readonly scripts: ReadonlyArray<ProjectScript>;
   /** Live threads, newest first. */
@@ -38,6 +41,8 @@ export interface StartProjectSection {
 export interface DevServersEnvironmentSection {
   readonly environmentId: EnvironmentId;
   readonly label: string;
+  /** Whether both the server and device lists have arrived. */
+  readonly loaded: boolean;
   readonly serverGroups: ReadonlyArray<ServerThreadGroup>;
   readonly devices: ReadonlyArray<DeviceSummary>;
   readonly hostLabelById: ReadonlyMap<string, string>;
@@ -74,9 +79,14 @@ const sectionHasRunning = (section: DevServersEnvironmentSection) =>
 
 export function DevServersView(props: DevServersViewProps) {
   const { sections, ...actions } = props;
+  const allLoaded = sections.length > 0 && sections.every((section) => section.loaded);
   return (
     <div className="flex flex-col gap-8">
-      {sections.some(sectionHasRunning) ? null : <DevServersEmptyState />}
+      {sections.some(sectionHasRunning) ? null : allLoaded ? (
+        <DevServersEmptyState />
+      ) : (
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      )}
       {sections.map((section) => (
         <DevServersSectionBody
           key={section.environmentId}
@@ -98,7 +108,7 @@ function DevServersEmptyState() {
         </EmptyMedia>
         <EmptyTitle>Nothing running that T3 Code started</EmptyTitle>
         <EmptyDescription>
-          Servers your threads start and booted simulators and emulators appear here.
+          Only servers that T3 Code threads and terminals started are listed.
         </EmptyDescription>
       </EmptyHeader>
     </Empty>
@@ -113,7 +123,8 @@ function DevServersSectionBody(
 ) {
   const { section, showLabel, ...actions } = props;
   const startProjects = section.canStart ? section.projects : [];
-  if (!sectionHasRunning(section) && startProjects.length === 0) return null;
+  const showAddScriptsHint = section.canStart && section.projects.length === 0;
+  if (!sectionHasRunning(section) && startProjects.length === 0 && !showAddScriptsHint) return null;
   return (
     <section aria-label={section.label} className="flex flex-col gap-6">
       {showLabel ? (
@@ -146,6 +157,13 @@ function DevServersSectionBody(
             <StartProject key={project.key} project={project} {...actions} />
           ))}
         </Region>
+      ) : showAddScriptsHint ? (
+        <Region title="Start">
+          <p className="text-muted-foreground text-sm">
+            Add project scripts in Settings to start them from here.{" "}
+            <EditScriptsLink projectKey={undefined} />
+          </p>
+        </Region>
       ) : null}
     </section>
   );
@@ -171,17 +189,36 @@ function ServerGroup(
   const { group, section } = props;
   return (
     <div className="flex flex-col rounded-lg border">
-      <div className="flex min-w-0 items-baseline gap-2 border-b px-3 py-2">
-        <span className="truncate font-medium text-sm">
-          {group.threadTitle ?? "Thread not loaded"}
-        </span>
-        <span className="shrink-0 font-mono text-muted-foreground text-xs">
-          {group.threadId.slice(0, 8)}
-        </span>
-        {group.projectName ? (
-          <span className="ms-auto truncate text-muted-foreground text-xs">
-            {group.projectName}
+      <div className="flex min-w-0 flex-col border-b px-3 py-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate font-medium text-sm">
+            {group.threadTitle ?? "Thread not loaded"}
           </span>
+          {group.threadTitle === null ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={<span className="shrink-0 font-mono text-muted-foreground text-xs" />}
+              >
+                {group.threadId.slice(group.threadId.indexOf(":") + 1).slice(0, 8)}
+              </TooltipTrigger>
+              <TooltipPopup>{group.threadId}</TooltipPopup>
+            </Tooltip>
+          ) : null}
+          {group.projectName ? (
+            <span className="ms-auto truncate text-muted-foreground text-xs">
+              {group.projectName}
+            </span>
+          ) : null}
+        </div>
+        {group.checkoutPath ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={<span className="truncate font-mono text-muted-foreground text-xs" />}
+            >
+              {group.checkoutPath}
+            </TooltipTrigger>
+            <TooltipPopup>{group.checkoutPath}</TooltipPopup>
+          </Tooltip>
         ) : null}
       </div>
       <ul className="m-0 flex list-none flex-col divide-y p-0">
@@ -274,6 +311,7 @@ function StartProject(props: DevServersActions & { readonly project: StartProjec
     <div className="flex flex-col rounded-lg border">
       <div className="flex min-w-0 items-center gap-3 border-b px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-medium text-sm">{project.projectName}</span>
+        <EditScriptsLink projectKey={project.settingsProjectKey} />
         {project.threads.length > 0 ? (
           <Select
             value={targetThreadId}
@@ -323,7 +361,7 @@ function StartProject(props: DevServersActions & { readonly project: StartProjec
             <Button
               size="xs"
               variant="outline"
-              aria-label={`Start ${script.name}`}
+              aria-label={`Start ${script.name} in ${project.projectName}`}
               disabled={targetThreadId === null}
               onClick={() => {
                 if (targetThreadId !== null) props.onStartScript(project, script, targetThreadId);
@@ -336,5 +374,20 @@ function StartProject(props: DevServersActions & { readonly project: StartProjec
         ))}
       </ul>
     </div>
+  );
+}
+
+function EditScriptsLink(props: { readonly projectKey: string | undefined }) {
+  return (
+    <Button
+      size="xs"
+      variant="link"
+      className="px-0 text-muted-foreground"
+      render={
+        <Link to="/settings/projects" search={{ project: props.projectKey, machine: undefined }} />
+      }
+    >
+      Edit scripts
+    </Button>
   );
 }
