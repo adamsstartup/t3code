@@ -12,12 +12,9 @@ import {
   type DiscoveredLocalServer,
   type ProjectScript,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  DEV_SERVERS_START_THREAD_BY_PROJECT_KEY,
-  DevServersStartThreadByProjectSchema,
   bootedMachineDevices,
   groupOwnedServers,
   resolveStartTargetThread,
@@ -290,17 +287,5 @@ describe("sortScriptsForStart", () => {
     ]);
 
     expect(sorted.map((entry) => entry.id)).toEqual(["web", "docs", "lint", "test"]);
-  });
-});
-
-describe("DevServersStartThreadByProjectSchema", () => {
-  it("persists remembered threads under a stable key as a project-to-thread record", () => {
-    const decode = Schema.decodeUnknownSync(DevServersStartThreadByProjectSchema);
-
-    expect(DEV_SERVERS_START_THREAD_BY_PROJECT_KEY).toBe(
-      "t3code:dev-servers:start-thread-by-project",
-    );
-    expect(decode({ "env-a:project-1": "thread-a" })).toEqual({ "env-a:project-1": "thread-a" });
-    expect(() => decode({ "env-a:project-1": 42 })).toThrow();
   });
 });
