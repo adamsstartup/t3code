@@ -9,6 +9,8 @@ import * as ProcessRunner from "../processRunner.ts";
 
 interface ResolveServerEnvironmentLabelInput {
   readonly cwdBaseName: string;
+  /** File whose first non-comment line names this environment (`<stateDir>/environment-label`). */
+  readonly overridePath?: string;
 }
 
 const ServerEnvironmentLabelCommandProbe = Schema.Literals([
@@ -193,20 +195,60 @@ const isWsl = Effect.fn("isWsl")(function* () {
   return kernelRelease.toLowerCase().includes("microsoft");
 });
 
-// Names this environment instead of the machine, e.g. for staged demos and scenario captures.
-const labelOverride = Config.String("T3CODE_ENVIRONMENT_LABEL").pipe(
+const EnvironmentLabelEnv = Config.String("T3CODE_ENVIRONMENT_LABEL").pipe(
   Config.option,
-  Config.map(Option.flatMap((label) => Option.fromNullishOr(normalizeLabel(label)))),
+  Config.map(Option.getOrUndefined),
 );
+
+function firstLabelLine(raw: string): string | null {
+  for (const line of raw.split(/\r?\n/g)) {
+    const trimmed = line.trim();
+    if (trimmed.length > 0 && !trimmed.startsWith("#")) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+const readLabelOverrideFile = Effect.fn("readLabelOverrideFile")(function* (overridePath: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  return yield* fileSystem.exists(overridePath).pipe(
+    Effect.flatMap((exists) =>
+      exists ? fileSystem.readFileString(overridePath) : Effect.succeed(null),
+    ),
+    Effect.map((raw) => (raw === null ? null : firstLabelLine(raw))),
+    Effect.catch((cause) =>
+      Effect.logDebug("Failed to read environment-label file.").pipe(
+        Effect.annotateLogs({ path: overridePath, cause }),
+        Effect.as(null),
+      ),
+    ),
+  );
+});
+
+/**
+ * A label the user picked, which wins over the machine name:
+ * `T3CODE_ENVIRONMENT_LABEL`, else the first line of the override file.
+ */
+export const resolveServerEnvironmentLabelOverride = Effect.fn(
+  "resolveServerEnvironmentLabelOverride",
+)(function* (overridePath: string | undefined) {
+  const fromEnv = normalizeLabel(
+    yield* EnvironmentLabelEnv.pipe(Effect.orElseSucceed(() => undefined)),
+  );
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return overridePath === undefined ? null : yield* readLabelOverrideFile(overridePath);
+});
 
 export const resolveServerEnvironmentLabel = Effect.fn("resolveServerEnvironmentLabel")(function* (
   input: ResolveServerEnvironmentLabelInput,
 ) {
-  const override = yield* labelOverride.pipe(Effect.orElseSucceed(() => Option.none<string>()));
-  if (Option.isSome(override)) {
-    return override.value;
+  const override = yield* resolveServerEnvironmentLabelOverride(input.overridePath);
+  if (override) {
+    return override;
   }
-
   const friendlyHostLabel = yield* resolveFriendlyHostLabel();
   if (friendlyHostLabel) {
     return friendlyHostLabel;

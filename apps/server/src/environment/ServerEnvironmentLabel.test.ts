@@ -1,16 +1,22 @@
-import { assert, it } from "@effect/vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/process";
 
 import * as ProcessRunner from "../processRunner.ts";
-import { resolveServerEnvironmentLabel } from "./ServerEnvironmentLabel.ts";
+import {
+  resolveServerEnvironmentLabel,
+  resolveServerEnvironmentLabelOverride,
+} from "./ServerEnvironmentLabel.ts";
 
 const neverExits = ChildProcessSpawner.make(() =>
   Effect.succeed(
@@ -101,3 +107,48 @@ it.effect("qualifies the inherited Windows hostname only inside WSL", () =>
     }
   }),
 );
+
+const withEnv = (env: Record<string, string>) =>
+  Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
+
+const tempLabelFile = Effect.fn("tempLabelFile")(function* (contents: string | null) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = yield* fileSystem.makeTempDirectory({ prefix: "t3-label-" });
+  const file = path.join(dir, "environment-label");
+  if (contents !== null) yield* fileSystem.writeFileString(file, contents);
+  return file;
+});
+
+describe("resolveServerEnvironmentLabelOverride", () => {
+  it.effect("prefers T3CODE_ENVIRONMENT_LABEL over the file", () =>
+    Effect.gen(function* () {
+      const file = yield* tempLabelFile("From file\n");
+      const label = yield* resolveServerEnvironmentLabelOverride(file).pipe(
+        withEnv({ T3CODE_ENVIRONMENT_LABEL: "  Macbook  " }),
+      );
+      expect(label).toBe("Macbook");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("reads the first non-comment line of the file", () =>
+    Effect.gen(function* () {
+      const file = yield* tempLabelFile("# shown in T3 Code\n\n  Desktop \nignored\n");
+      const label = yield* resolveServerEnvironmentLabelOverride(file).pipe(withEnv({}));
+      expect(label).toBe("Desktop");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("returns null when neither is set", () =>
+    Effect.gen(function* () {
+      const missing = yield* resolveServerEnvironmentLabelOverride(yield* tempLabelFile(null)).pipe(
+        withEnv({}),
+      );
+      const blank = yield* resolveServerEnvironmentLabelOverride(
+        yield* tempLabelFile("  \n# x\n"),
+      ).pipe(withEnv({ T3CODE_ENVIRONMENT_LABEL: "   " }));
+      const none = yield* resolveServerEnvironmentLabelOverride(undefined).pipe(withEnv({}));
+      expect([missing, blank, none]).toEqual([null, null, null]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
