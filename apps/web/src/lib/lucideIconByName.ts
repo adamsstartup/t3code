@@ -2,6 +2,7 @@
 // Import lazily: one chunk avoids lucide-react/dynamic emitting about 1,900 icon chunks.
 import * as Lucide from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { customProjectIcons } from "./customProjectIcons";
 
 const iconComponents = new Set<unknown>(Object.values(Lucide.icons));
 const lucideExports: Record<string, unknown> = Lucide;
@@ -19,9 +20,14 @@ function toKebabName(pascalName: string): string {
   return (pascalName.match(/[A-Z][a-z]*|[0-9]+[a-z]*/g) ?? []).join("-").toLowerCase();
 }
 
-export const lucideIconNames: ReadonlyArray<string> = Object.keys(Lucide.icons).map(toKebabName);
+export const lucideIconNames: ReadonlyArray<string> = [
+  ...customProjectIcons.keys(),
+  ...Object.keys(Lucide.icons).map(toKebabName),
+];
 
 export function lucideIconByName(name: string): LucideIcon | undefined {
+  const custom = customProjectIcons.get(name);
+  if (custom) return custom;
   const icon = lucideExports[toPascalName(name)];
   return iconComponents.has(icon) ? (icon as LucideIcon) : undefined;
 }

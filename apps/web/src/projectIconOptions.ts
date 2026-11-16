@@ -1,3 +1,4 @@
+import { customProjectIconNames } from "./lib/customProjectIcons";
 import { lucideIconNames } from "./lib/lucideIconByName";
 export { PROJECT_ICON_COLORS, projectIconColorClassName } from "./projectIconColors";
 
@@ -63,7 +64,7 @@ export const PROJECT_EMOJIS: ReadonlyArray<{ readonly emoji: string; readonly la
 
 export function filterProjectIconNames(query: string): ReadonlyArray<string> {
   const normalized = query.trim().toLowerCase().replaceAll(/\s+/g, "-");
-  if (!normalized) return POPULAR_PROJECT_ICONS;
+  if (!normalized) return [...customProjectIconNames, ...POPULAR_PROJECT_ICONS];
   return lucideIconNames.filter((name) => name.includes(normalized)).slice(0, 60);
 }
 
