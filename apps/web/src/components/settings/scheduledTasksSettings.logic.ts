@@ -153,6 +153,23 @@ export type ScheduledTaskPrefill = Partial<
   >
 >;
 
+/** A server that cannot run a task once keeps the draft's own schedule. */
+export function applyScheduledTaskPrefill(
+  draft: DraftState,
+  prefill: ScheduledTaskPrefill | undefined,
+  options: { readonly offersOnce: boolean },
+): DraftState {
+  if (prefill === undefined) return draft;
+  return {
+    ...draft,
+    ...prefill,
+    scheduleMode:
+      prefill.scheduleMode === undefined || (prefill.scheduleMode === "once" && !options.offersOnce)
+        ? draft.scheduleMode
+        : prefill.scheduleMode,
+  };
+}
+
 export const WEBHOOK_SIGNATURE_DEFAULTS = {
   signatureHeader: "x-hub-signature-256",
   signatureEncoding: "hex",

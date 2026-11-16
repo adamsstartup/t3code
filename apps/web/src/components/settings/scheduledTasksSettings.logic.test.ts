@@ -18,6 +18,7 @@ import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope"
 
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import {
+  applyScheduledTaskPrefill,
   scheduledTaskDefaultModel,
   defaultScheduledTaskProjectId,
   matchesScheduledTaskScope,
@@ -205,6 +206,33 @@ describe("scheduled task destination", () => {
       workspaceMode: "worktree",
       startFromOrigin: true,
     });
+  });
+});
+
+describe("applyScheduledTaskPrefill", () => {
+  const blank = { ...taskToDraft(legacyTask), editingId: null, title: "", prompt: "" };
+  const prefill = {
+    title: "Tidy notes",
+    prompt: "Tidy notes\nand push",
+    scheduleMode: "once",
+    projectId: "project:composer",
+    threadId: "thread:composer",
+    threadMode: "continue",
+  } as const;
+
+  it("fills the named fields and leaves the rest of the draft alone", () => {
+    const draft = applyScheduledTaskPrefill(blank, prefill, { offersOnce: true });
+    expect(draft).toEqual({ ...blank, ...prefill });
+  });
+
+  it("keeps the draft's schedule where the server cannot run a task once", () => {
+    const draft = applyScheduledTaskPrefill(blank, prefill, { offersOnce: false });
+    expect(draft.scheduleMode).toBe(blank.scheduleMode);
+    expect(draft.prompt).toBe(prefill.prompt);
+  });
+
+  it("returns the draft unchanged without a prefill", () => {
+    expect(applyScheduledTaskPrefill(blank, undefined, { offersOnce: true })).toBe(blank);
   });
 });
 

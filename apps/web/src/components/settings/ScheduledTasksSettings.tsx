@@ -95,6 +95,7 @@ import { SettingsGroup } from "./SettingsGroup";
 import { settingsScopeEnvironmentLabel, settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
 import {
   WEBHOOK_SIGNATURE_DEFAULTS,
+  applyScheduledTaskPrefill,
   changeDraftProject,
   moveDraftToThread,
   scheduleDraftErrors,
@@ -110,6 +111,7 @@ import {
   taskToDraft,
   unbindDraftFromThread,
   type DraftState,
+  type ScheduledTaskPrefill,
   type ScheduleMode,
   type WorkspaceMode,
 } from "./scheduledTasksSettings.logic";
@@ -1151,13 +1153,20 @@ function WebhookDeliveryMode({ environmentId }: { readonly environmentId: Enviro
   );
 }
 
+/** Reads the settings scope, so a caller outside Settings wraps it in a SettingsScopeProvider. */
 function ScheduledTaskEditorDialog({
   initialEnvironmentId,
   task,
+  prefill,
+  onSaved,
   onClose,
 }: {
   readonly initialEnvironmentId: EnvironmentId;
   readonly task: ScheduledTask | null;
+  /** Starts a new task from another surface's values. Ignored when editing. */
+  readonly prefill?: ScheduledTaskPrefill | undefined;
+  /** Runs after a successful save, before the dialog closes. */
+  readonly onSaved?: ((task: ScheduledTask) => void) | undefined;
   readonly onClose: () => void;
 }) {
   const [saving, setSaving] = useState(false);
@@ -1173,6 +1182,8 @@ function ScheduledTaskEditorDialog({
         <ScheduledTaskEditorForm
           initialEnvironmentId={initialEnvironmentId}
           task={task}
+          prefill={prefill}
+          onSaved={onSaved}
           saving={saving}
           onSavingChange={setSaving}
           onClose={onClose}
@@ -1349,12 +1360,16 @@ function ScheduledTaskDestination({
 function ScheduledTaskEditorForm({
   initialEnvironmentId,
   task,
+  prefill,
+  onSaved,
   saving,
   onSavingChange: setSaving,
   onClose,
 }: {
   readonly initialEnvironmentId: EnvironmentId;
   readonly task: ScheduledTask | null;
+  readonly prefill: ScheduledTaskPrefill | undefined;
+  readonly onSaved: ((task: ScheduledTask) => void) | undefined;
   readonly saving: boolean;
   readonly onSavingChange: (saving: boolean) => void;
   readonly onClose: () => void;
@@ -1392,10 +1407,14 @@ function ScheduledTaskEditorForm({
   const [draft, setDraft] = useState<DraftState>(() =>
     task
       ? taskToDraft(task)
-      : {
-          ...EMPTY_DRAFT,
-          projectId: defaultScheduledTaskProjectId(scopedProjects, scope),
-        },
+      : applyScheduledTaskPrefill(
+          {
+            ...EMPTY_DRAFT,
+            projectId: defaultScheduledTaskProjectId(scopedProjects, scope),
+          },
+          prefill,
+          { offersOnce },
+        ),
   );
   // Pinned first. The chosen project stays listed after it is archived.
   const projects = scopedProjects
@@ -1564,6 +1583,7 @@ function ScheduledTaskEditorForm({
       }
       return;
     }
+    onSaved?.(result.value.task);
     onClose();
   };
 
