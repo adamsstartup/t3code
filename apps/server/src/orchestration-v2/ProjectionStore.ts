@@ -8,6 +8,7 @@ import { makeThreadFind } from "./ThreadFind.ts";
 import { unsentManualContinuationSource } from "./manualContinuation.ts";
 import type {
   OrchestrationV2ThreadLinkMetadata,
+  OrchestrationV2ThreadTokenTotals,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
   OrchestrationV2ThreadHistoryPage,
@@ -651,6 +652,9 @@ export interface ProjectionStoreV2Shape {
   readonly getThreadTitles: (
     threadIds: ReadonlyArray<ThreadId>,
   ) => Effect.Effect<Record<ThreadId, string>, ProjectionStoreV2Error>;
+  readonly getThreadTokenTotals: (
+    threadId: ThreadId,
+  ) => Effect.Effect<OrchestrationV2ThreadTokenTotals, ProjectionStoreV2Error>;
   readonly getThreadWorktreePaths: (options?: {
     readonly includeArchived?: boolean;
   }) => Effect.Effect<
@@ -9131,6 +9135,47 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       return Object.fromEntries(rows.map((row) => [row.thread_id, row.title]));
     }, Effect.mapError(shellSnapshotReadError));
 
+    // Read when a client asks, so the shell stream's hot path never parses turn payloads.
+    const getThreadTokenTotals = Effect.fn("ProjectionStore.getThreadTokenTotals")(function* (
+      threadId: ThreadId,
+    ) {
+      const rows = yield* sql<{
+        readonly input_tokens: number;
+        readonly cached_input_tokens: number;
+        readonly output_tokens: number;
+        readonly measured_turns: number;
+        readonly turns: number;
+      }>`
+        SELECT
+          COALESCE(SUM(
+            COALESCE(json_extract(payload_json, '$.turnTokenUsage.inputTokens'), 0)
+            + COALESCE(json_extract(payload_json, '$.turnTokenUsage.otherUsage.inputTokens'), 0)
+          ), 0) AS input_tokens,
+          COALESCE(SUM(
+            COALESCE(json_extract(payload_json, '$.turnTokenUsage.cachedInputTokens'), 0)
+          ), 0) AS cached_input_tokens,
+          COALESCE(SUM(
+            COALESCE(json_extract(payload_json, '$.turnTokenUsage.outputTokens'), 0)
+            + COALESCE(json_extract(payload_json, '$.turnTokenUsage.otherUsage.outputTokens'), 0)
+          ), 0) AS output_tokens,
+          COALESCE(SUM(
+            json_extract(payload_json, '$.turnTokenUsage.usageStatus') = 'complete'
+          ), 0) AS measured_turns,
+          COUNT(*) AS turns
+        FROM orchestration_v2_projection_provider_turns
+        WHERE thread_id = ${threadId}
+      `;
+      const row = rows[0];
+      const measuredTurns = row?.measured_turns ?? 0;
+      return {
+        inputTokens: row?.input_tokens ?? 0,
+        cachedInputTokens: row?.cached_input_tokens ?? 0,
+        outputTokens: row?.output_tokens ?? 0,
+        measuredTurns,
+        unmeasuredTurns: (row?.turns ?? 0) - measuredTurns,
+      };
+    }, Effect.mapError(shellSnapshotReadError));
+
     const findGuestShareThreadId = Effect.fn("ProjectionStore.findGuestShareThreadId")(function* (
       shareId: GuestShareId,
     ) {
@@ -9302,6 +9347,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getSettlementCandidates: readOnReader(getSettlementCandidates),
       getThreadsWithPullRequests: readOnReader(getThreadsWithPullRequests),
       getThreadTitles: readOnReader(getThreadTitles),
+      getThreadTokenTotals: readOnReader(getThreadTokenTotals),
       getThreadLinkMetadata: readOnReader(getThreadLinkMetadata),
       getThreadWorktreePaths: readOnReader(getThreadWorktreePaths),
       getOpenRemoteDelegatedTasks: getOpenRemoteDelegatedTasks.pipe(NodeSqliteClient.readOnly),

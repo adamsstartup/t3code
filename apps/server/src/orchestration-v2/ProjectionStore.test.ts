@@ -28,6 +28,7 @@ import {
   RunAttemptId,
   RunId,
   ThreadId,
+  type TurnTokenUsage,
   TurnItemId,
   type ThreadPullRequestLink,
   isLiveSubagentShell,
@@ -3775,6 +3776,119 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
   it.effect(
     "command reads skip finished leaf nodes of finished runs",
     () => commandReadsSkipSettledLeafNodes,
+  );
+  it.effect(
+    "sums what a thread's provider turns spent, and counts the turns it cannot measure",
+    () =>
+      Effect.gen(function* () {
+        const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+        const now = yield* DateTime.now;
+        const createThread = (threadId: ThreadId) =>
+          projectionStore.apply({
+            id: EventId.make(`event:${threadId}:created`),
+            type: "thread.created",
+            threadId,
+            occurredAt: now,
+            payload: {
+              createdBy: "user",
+              creationSource: "web",
+              id: threadId,
+              projectId: ProjectId.make("project:token-totals"),
+              title: "Token totals",
+              providerInstanceId,
+              modelSelection,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              activeProviderThreadId: null,
+              lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+              forkedFrom: null,
+              createdAt: now,
+              updatedAt: now,
+              archivedAt: null,
+              settledOverride: null,
+              settledAt: null,
+              lastVisitedAt: null,
+              deletedAt: null,
+            },
+          });
+        const recordTurn = (
+          threadId: ThreadId,
+          ordinal: number,
+          turnTokenUsage: TurnTokenUsage | undefined,
+        ) => {
+          const nodeId = NodeId.make(`node:${threadId}:${ordinal}`);
+          return projectionStore.apply({
+            id: EventId.make(`event:${threadId}:turn:${ordinal}`),
+            type: "provider-turn.updated",
+            threadId,
+            nodeId,
+            driver,
+            occurredAt: now,
+            payload: {
+              id: ProviderTurnId.make(`provider-turn:${threadId}:${ordinal}`),
+              providerThreadId: ProviderThreadId.make(`provider-thread:${threadId}`),
+              nodeId,
+              runAttemptId: null,
+              nativeTurnRef: null,
+              ordinal,
+              status: "completed",
+              startedAt: now,
+              completedAt: now,
+              ...(turnTokenUsage === undefined ? {} : { turnTokenUsage }),
+            },
+          });
+        };
+        const measured = { usageScope: "main_agent", hasSubagents: false } as const;
+        const threadId = ThreadId.make("thread:token-totals");
+        const otherThreadId = ThreadId.make("thread:token-totals:other");
+        yield* createThread(threadId);
+        yield* createThread(otherThreadId);
+        yield* recordTurn(threadId, 1, {
+          ...measured,
+          usageStatus: "complete",
+          inputTokens: 1_000,
+          cachedInputTokens: 800,
+          outputTokens: 200,
+        });
+        // Subagent and compaction spend the provider's ledger reported beyond the main agent.
+        yield* recordTurn(threadId, 2, {
+          ...measured,
+          usageStatus: "complete",
+          inputTokens: 2_000,
+          cachedInputTokens: 1_500,
+          outputTokens: 300,
+          otherUsage: { inputTokens: 50, outputTokens: 5 },
+        });
+        yield* recordTurn(threadId, 3, { ...measured, usageStatus: "partial", inputTokens: 10 });
+        yield* recordTurn(threadId, 4, { ...measured, usageStatus: "unavailable" });
+        yield* recordTurn(threadId, 5, undefined);
+        yield* recordTurn(otherThreadId, 1, {
+          ...measured,
+          usageStatus: "complete",
+          inputTokens: 9_999,
+          outputTokens: 9_999,
+        });
+
+        assert.deepEqual(yield* projectionStore.getThreadTokenTotals(threadId), {
+          inputTokens: 3_060,
+          cachedInputTokens: 2_300,
+          outputTokens: 505,
+          measuredTurns: 2,
+          unmeasuredTurns: 3,
+        });
+        assert.deepEqual(
+          yield* projectionStore.getThreadTokenTotals(ThreadId.make("thread:token-totals:unknown")),
+          {
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            measuredTurns: 0,
+            unmeasuredTurns: 0,
+          },
+        );
+      }),
   );
   it.effect("preserves stored provider usage when a terminal update omits it", () =>
     Effect.gen(function* () {

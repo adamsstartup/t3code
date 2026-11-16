@@ -3826,6 +3826,7 @@ export const ORCHESTRATION_V2_WS_METHODS = {
   getArchivedShellSnapshot: "orchestration.getArchivedShellSnapshot",
   getThreadFamily: "orchestration.getThreadFamily",
   getThreadTitles: "orchestration.getThreadTitles",
+  getThreadTokenTotals: "orchestration.getThreadTokenTotals",
   getThreadLinkMetadata: "orchestration.getThreadLinkMetadata",
   getWorktreeThreadIds: "orchestration.getWorktreeThreadIds",
   getOlderSettledThreads: "orchestration.getOlderSettledThreads",
@@ -3978,6 +3979,25 @@ export const OrchestrationV2GetThreadTitlesInput = Schema.Struct({
 
 /** Titles of the requested threads that exist, archived ones included. Deleted and unknown ids are absent. */
 export const OrchestrationV2ThreadTitles = Schema.Record(ThreadId, Schema.String);
+
+export const OrchestrationV2GetThreadTokenTotalsInput = Schema.Struct({
+  threadId: ThreadId,
+});
+
+/**
+ * What a thread's own provider turns spent, summed from each turn's `turnTokenUsage`. As there,
+ * input includes cache reads and writes and output includes reasoning. Subagent threads are
+ * separate threads and are not counted.
+ */
+export const OrchestrationV2ThreadTokenTotals = Schema.Struct({
+  inputTokens: NonNegativeInt,
+  cachedInputTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  measuredTurns: NonNegativeInt,
+  // Turns with partial or no reported spend, so the sums are a floor.
+  unmeasuredTurns: NonNegativeInt,
+});
+export type OrchestrationV2ThreadTokenTotals = typeof OrchestrationV2ThreadTokenTotals.Type;
 
 export const OrchestrationV2ThreadLinkMetadata = Schema.Struct({
   title: Schema.String,
@@ -4510,6 +4530,10 @@ export const OrchestrationV2RpcSchemas = {
   getThreadTitles: {
     input: OrchestrationV2GetThreadTitlesInput,
     output: OrchestrationV2ThreadTitles,
+  },
+  getThreadTokenTotals: {
+    input: OrchestrationV2GetThreadTokenTotalsInput,
+    output: OrchestrationV2ThreadTokenTotals,
   },
   getThreadLinkMetadata: {
     input: OrchestrationV2GetThreadTitlesInput,
