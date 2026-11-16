@@ -132,6 +132,27 @@ export interface DraftState {
   readonly savedFilters: ReadonlyArray<WebhookFilterDraft>;
 }
 
+/** Editor fields another surface, such as the composer, fills in before the form opens. */
+export type ScheduledTaskPrefill = Partial<
+  Pick<
+    DraftState,
+    | "title"
+    | "prompt"
+    | "scheduleMode"
+    | "projectId"
+    | "threadId"
+    | "threadMode"
+    | "workspaceMode"
+    | "baseRef"
+    | "startFromOrigin"
+    | "existingWorktreePath"
+    | "modelKey"
+    | "baseModelSelection"
+    | "runtimeMode"
+    | "interactionMode"
+  >
+>;
+
 export const WEBHOOK_SIGNATURE_DEFAULTS = {
   signatureHeader: "x-hub-signature-256",
   signatureEncoding: "hex",
