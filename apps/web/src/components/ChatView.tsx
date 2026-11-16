@@ -3598,7 +3598,12 @@ export default function ChatView(props: ChatViewProps) {
                     <ChildThreadApprovals threadRef={activeThreadRef} />
                     <div className="relative">
                       <ComposerSurface.Shell contextRow={showComposerContextStrip}>
-                        <ComposerContextLabel usage={activeContextWindow} />
+                        <ComposerContextLabel
+                          usage={activeContextWindow}
+                          environmentId={environmentId}
+                          threadId={isServerThread ? threadId : null}
+                          spendRevision={`${activeLatestRun?.runId ?? ""}:${activeLatestRun?.completedAt ?? ""}`}
+                        />
                         <ComposerSurface.Host
                           inert={queuedRunEdit.isSaving}
                           aria-busy={queuedRunEdit.isSaving}

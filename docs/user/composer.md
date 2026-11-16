@@ -97,6 +97,15 @@ messages while disconnected. Uploads resume when you reconnect. Drafts and queue
 messages survive app restarts. Signing out of T3 Connect keeps that work on your
 device until you sign back into the same account.
 
+## Context use
+
+On web and desktop, a small tab on the composer's top edge shows how much of the
+model's context window the thread is using, such as `84k / 200k`. It turns yellow
+at half full and red at 80%, and drops after a compaction. Select it to switch to
+the tokens the thread's turns have spent in total, and again to switch back. The
+total counts the main agent only, and shows a `+` when some turns reported no
+usage. Providers that report no usage show the context figure alone.
+
 ## Custom models
 
 On web and desktop, use Settings → Providers → **Models** to add an unlisted model with a custom

@@ -9136,6 +9136,8 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
     }, Effect.mapError(shellSnapshotReadError));
 
     // Read when a client asks, so the shell stream's hot path never parses turn payloads.
+    // `otherUsage` stays out: it is ledger growth, and a resumed provider process reports the
+    // earlier turns' spend again as growth.
     const getThreadTokenTotals = Effect.fn("ProjectionStore.getThreadTokenTotals")(function* (
       threadId: ThreadId,
     ) {
@@ -9149,14 +9151,12 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         SELECT
           COALESCE(SUM(
             COALESCE(json_extract(payload_json, '$.turnTokenUsage.inputTokens'), 0)
-            + COALESCE(json_extract(payload_json, '$.turnTokenUsage.otherUsage.inputTokens'), 0)
           ), 0) AS input_tokens,
           COALESCE(SUM(
             COALESCE(json_extract(payload_json, '$.turnTokenUsage.cachedInputTokens'), 0)
           ), 0) AS cached_input_tokens,
           COALESCE(SUM(
             COALESCE(json_extract(payload_json, '$.turnTokenUsage.outputTokens'), 0)
-            + COALESCE(json_extract(payload_json, '$.turnTokenUsage.otherUsage.outputTokens'), 0)
           ), 0) AS output_tokens,
           COALESCE(SUM(
             json_extract(payload_json, '$.turnTokenUsage.usageStatus') = 'complete'

@@ -247,6 +247,11 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
         return Atom.make((get) => get(state).removedAt);
       },
     }),
+    // Asked for by the composer's context label; the shell does not carry spend.
+    threadTokenTotals: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:orchestration:thread-token-totals",
+      tag: ORCHESTRATION_V2_WS_METHODS.getThreadTokenTotals,
+    }),
     threadFamily: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:thread-family-for-delete",
       tag: ORCHESTRATION_V2_WS_METHODS.getThreadFamily,

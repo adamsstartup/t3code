@@ -3852,7 +3852,7 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
           cachedInputTokens: 800,
           outputTokens: 200,
         });
-        // Subagent and compaction spend the provider's ledger reported beyond the main agent.
+        // Ledger growth beyond the main agent is left out: after a restart it repeats earlier turns.
         yield* recordTurn(threadId, 2, {
           ...measured,
           usageStatus: "complete",
@@ -3872,9 +3872,9 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
         });
 
         assert.deepEqual(yield* projectionStore.getThreadTokenTotals(threadId), {
-          inputTokens: 3_060,
+          inputTokens: 3_010,
           cachedInputTokens: 2_300,
-          outputTokens: 505,
+          outputTokens: 500,
           measuredTurns: 2,
           unmeasuredTurns: 3,
         });

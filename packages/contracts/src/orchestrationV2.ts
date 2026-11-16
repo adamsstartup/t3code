@@ -3986,8 +3986,8 @@ export const OrchestrationV2GetThreadTokenTotalsInput = Schema.Struct({
 
 /**
  * What a thread's own provider turns spent, summed from each turn's `turnTokenUsage`. As there,
- * input includes cache reads and writes and output includes reasoning. Subagent threads are
- * separate threads and are not counted.
+ * input includes cache reads and writes and output includes reasoning. Main agent only: each
+ * turn's `otherUsage` and subagent threads are not counted.
  */
 export const OrchestrationV2ThreadTokenTotals = Schema.Struct({
   inputTokens: NonNegativeInt,

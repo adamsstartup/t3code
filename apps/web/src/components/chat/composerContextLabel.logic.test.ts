@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { contextLabel } from "./composerContextLabel.logic";
+import { contextLabel, tokenTotalLabel } from "./composerContextLabel.logic";
 
 describe("contextLabel", () => {
   it("shows nothing before the model reports usage", () => {
@@ -42,5 +42,44 @@ describe("contextLabel", () => {
     expect(contextLabel({ usedTokens: 84_210, maxTokens: 0, usedPercentage: 95 })?.tone).toBe(
       "plain",
     );
+  });
+});
+
+describe("tokenTotalLabel", () => {
+  const totals = {
+    inputTokens: 12_100_000,
+    cachedInputTokens: 11_000_000,
+    outputTokens: 300_000,
+    measuredTurns: 8,
+    unmeasuredTurns: 0,
+  };
+
+  it("adds input and output into one total", () => {
+    expect(tokenTotalLabel(totals)).toEqual({
+      text: "12.4m total",
+      description:
+        "Total: 12,400,000 tokens over 8 turns, main agent only. Input 12,100,000 (11,000,000 cached), output 300,000.",
+    });
+  });
+
+  it("marks the total as a minimum when some turns reported no usage", () => {
+    expect(tokenTotalLabel({ ...totals, measuredTurns: 1, unmeasuredTurns: 2 })).toEqual({
+      text: "12.4m+ total",
+      description:
+        "Total: at least 12,400,000 tokens over 1 turn, main agent only. Input 12,100,000 (11,000,000 cached), output 300,000. 2 turns reported no usage.",
+    });
+  });
+
+  it("has nothing to show before the server answers or when no turn reported usage", () => {
+    expect(tokenTotalLabel(null)).toBeNull();
+    expect(
+      tokenTotalLabel({
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        measuredTurns: 0,
+        unmeasuredTurns: 4,
+      }),
+    ).toBeNull();
   });
 });
