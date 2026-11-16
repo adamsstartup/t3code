@@ -16,16 +16,12 @@ import {
 } from "lucide-react";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
-import { cn, isMacPlatform } from "~/lib/utils";
-import { useShortcutModifierState } from "../../shortcutModifierState";
+import { cn } from "~/lib/utils";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  alternateComposerDispatchAction,
-  resolveComposerDispatchMode,
-} from "@t3tools/client-runtime/state/composer-dispatch";
+import { resolveComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 
 interface PendingActionState {
   questionIndex: number;
@@ -58,6 +54,9 @@ interface ComposerPrimaryActionsProps {
   preserveComposerFocusOnPointerDown?: boolean;
   isEditingQueuedMessage?: boolean;
   onSubmitMessage?: MouseEventHandler<HTMLButtonElement>;
+  /** While a turn runs, Queue and Steer are separate buttons and each names its own mode. */
+  onQueueMessage?: MouseEventHandler<HTMLButtonElement>;
+  onSteerMessage?: MouseEventHandler<HTMLButtonElement>;
   onResume?: () => void;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
@@ -91,6 +90,21 @@ const STOP_LANDED_CLICK_GUARD_MS = 500;
 
 const messageActionPillClassName =
   "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-message-action font-medium text-base text-message-action-foreground shadow-xs shadow-message-action/24 outline-none hover:bg-message-action-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:text-sm";
+
+const sendCircleClassName =
+  "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none";
+const sendCircleFilledClassName =
+  "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover disabled:bg-foreground/12 disabled:text-muted-foreground";
+const sendCircleStageClassName =
+  "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110 disabled:opacity-64";
+/** The follow-up action Enter does not send. */
+const sendCircleQuietClassName =
+  "border border-border bg-transparent text-foreground shadow-none hover:bg-accent disabled:text-muted-foreground disabled:opacity-64";
+
+const FOLLOW_UP_ACTIONS = {
+  queue: { label: "Queue message", hint: "Send when this turn ends", Icon: ListPlusIcon },
+  steer: { label: "Steer message", hint: "Send into the running turn", Icon: CornerUpRightIcon },
+} as const;
 
 const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
   event.preventDefault();
@@ -240,6 +254,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   preserveComposerFocusOnPointerDown = false,
   isEditingQueuedMessage = false,
   onSubmitMessage,
+  onQueueMessage,
+  onSteerMessage,
   onResume,
   onPreviousPendingQuestion,
   onInterrupt,
@@ -253,16 +269,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     ? { onPointerDown: preventPointerFocus }
     : undefined;
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
-  const shortcutModifiers = useShortcutModifierState();
-  const isQueuing =
-    !isEditingQueuedMessage &&
-    resolveComposerDispatchMode({
-      running: isRunning,
-      activeTurnDefault: followUpBehavior,
-      canSteer,
-      alternateModifier: shortcutModifiers.metaKey || shortcutModifiers.ctrlKey,
-    }) === "queue";
-  const alternateAction = alternateComposerDispatchAction(followUpBehavior);
+  // The mode Enter sends. Its button keeps the filled look.
+  const enterMode = resolveComposerDispatchMode({
+    running: isRunning,
+    activeTurnDefault: followUpBehavior,
+    canSteer,
+    alternateModifier: false,
+  });
   const isSendDisabled = !canOperateThread || sendDisabledReason !== null;
   const stageBackdropVariant = useSidebarStageBackdropVariant(environmentIdentificationMode);
 
@@ -375,11 +388,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       ? "Update queued message"
       : compactsBeforeSend
         ? "Compact and send"
-        : isQueuing
-          ? "Queue message"
-          : isRunning
-            ? "Steer message"
-            : "Submit message";
+        : "Submit message";
   const submitStatus = isEnvironmentUnavailable
     ? "Environment disconnected"
     : (sendDisabledReason ??
@@ -392,21 +401,66 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           : null));
   const submitTooltip =
     submitStatus ??
-    (compactsBeforeSend
-      ? `Summarize ${compactTokens} tokens of history, then send`
-      : isRunning && !isEditingQueuedMessage && canSteer
-        ? `Click to ${followUpBehavior}, ${isMacPlatform(navigator.platform) ? "⌘" : "Ctrl"}-click${alternateShortcutLabel ? ` or ${alternateShortcutLabel}` : ""} to ${alternateAction}`
-        : submitLabel);
+    (compactsBeforeSend ? `Summarize ${compactTokens} tokens of history, then send` : submitLabel);
+  const sendDisabled =
+    isSendBusy ||
+    isSendDisabled ||
+    isEnvironmentUnavailable ||
+    (!hasSendableContent && !showResume);
+  const stageArt = stageBackdropVariant ? (
+    <span className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
+      <StageBackdropButtonArt variant={stageBackdropVariant} />
+    </span>
+  ) : null;
+  const filledClassName = stageBackdropVariant
+    ? sendCircleStageClassName
+    : sendCircleFilledClassName;
+
+  // A resume compaction keeps the single button: its toggle describes one send.
+  const splitsFollowUp = isRunning && !isEditingQueuedMessage && !showResume && !compactsBeforeSend;
+  const followUpButton = (mode: "queue" | "steer") => {
+    const { label, hint, Icon } = FOLLOW_UP_ACTIONS[mode];
+    const sendsOnEnter = enterMode === mode;
+    const onFollowUp = mode === "queue" ? onQueueMessage : onSteerMessage;
+    return (
+      <Tooltip key={mode}>
+        <TooltipTrigger render={<span className="inline-flex" />}>
+          <button
+            type="button"
+            className={cn(
+              sendCircleClassName,
+              sendsOnEnter ? filledClassName : sendCircleQuietClassName,
+            )}
+            {...pointerFocusProps}
+            onClick={(event) => {
+              if (stopPhase === "landed") return;
+              onFollowUp?.(event);
+            }}
+            disabled={sendDisabled}
+            aria-label={label}
+          >
+            {sendsOnEnter ? stageArt : null}
+            {isSendBusy && sendsOnEnter ? (
+              <Spinner size="sm" aria-hidden="true" />
+            ) : (
+              <Icon className="size-4" aria-hidden="true" />
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipPopup>
+          {submitStatus ??
+            (sendsOnEnter || !alternateShortcutLabel
+              ? hint
+              : `${hint} (${alternateShortcutLabel})`)}
+        </TooltipPopup>
+      </Tooltip>
+    );
+  };
 
   const sendButton = (
     <button
       type={showResume ? "button" : "submit"}
-      className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
-        stageBackdropVariant
-          ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110 disabled:opacity-64"
-          : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover disabled:bg-foreground/12 disabled:text-muted-foreground",
-      )}
+      className={cn(sendCircleClassName, filledClassName)}
       {...pointerFocusProps}
       onClick={(event) => {
         if (stopPhase === "landed") {
@@ -416,29 +470,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         if (showResume) onResume?.();
         else onSubmitMessage?.(event);
       }}
-      disabled={
-        isSendBusy ||
-        isSendDisabled ||
-        isEnvironmentUnavailable ||
-        (!hasSendableContent && !showResume)
-      }
+      disabled={sendDisabled}
       aria-label={submitStatus ?? submitLabel}
     >
-      {stageBackdropVariant ? (
-        <span className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-          <StageBackdropButtonArt variant={stageBackdropVariant} />
-        </span>
-      ) : null}
+      {stageArt}
       {isSendBusy ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
         <PlayIcon className="size-4 fill-current" aria-hidden="true" />
       ) : isEditingQueuedMessage ? (
         <CheckIcon className="size-4" aria-hidden="true" />
-      ) : isRunning && isQueuing ? (
-        <ListPlusIcon className="size-4" aria-hidden="true" />
-      ) : isRunning ? (
-        <CornerUpRightIcon className="size-4" aria-hidden="true" />
       ) : (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path
@@ -453,7 +494,12 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </button>
   );
 
-  const submit = (
+  const submit = splitsFollowUp ? (
+    <>
+      {followUpButton("queue")}
+      {canSteer ? followUpButton("steer") : null}
+    </>
+  ) : (
     <Tooltip key="submit">
       <TooltipTrigger render={<span className="inline-flex" />}>{sendButton}</TooltipTrigger>
       <TooltipPopup>{submitTooltip}</TooltipPopup>

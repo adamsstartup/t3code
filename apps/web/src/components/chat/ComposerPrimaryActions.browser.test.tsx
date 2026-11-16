@@ -194,3 +194,51 @@ it("swaps the collapsed composer's send button for Stop while a turn can be stop
   await screen.rerender(collapsed({ canInterrupt: false }));
   await expect.element(screen.getByRole("button", { name: "Send message" })).toBeVisible();
 });
+
+it("offers Queue and Steer as separate actions while a turn runs", async () => {
+  const props = { ...setup(), hasSendableContent: true, compact: false };
+  const onQueueMessage = vi.fn();
+  const onSteerMessage = vi.fn();
+  const submit = vi.fn();
+  const view = (overrides: Partial<ComponentProps<typeof ComposerPrimaryActions>> = {}) => (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <ComposerPrimaryActions
+        {...props}
+        onQueueMessage={onQueueMessage}
+        onSteerMessage={onSteerMessage}
+        {...overrides}
+      />
+    </form>
+  );
+  await using screen = await render(view());
+  const queue = screen.getByRole("button", { name: "Queue message", exact: true });
+  const steer = screen.getByRole("button", { name: "Steer message", exact: true });
+  await act(() => (queue.element() as HTMLButtonElement).click());
+  expect(onQueueMessage).toHaveBeenCalledTimes(1);
+  expect(onSteerMessage).not.toHaveBeenCalled();
+  await act(() => (steer.element() as HTMLButtonElement).click());
+  expect(onSteerMessage).toHaveBeenCalledTimes(1);
+  expect(onQueueMessage).toHaveBeenCalledTimes(1);
+  // Each button names its own mode, so neither falls through to the form's default dispatch.
+  expect(submit).not.toHaveBeenCalled();
+  expect(props.onSubmitMessage).not.toHaveBeenCalled();
+  expect(
+    queue.element().compareDocumentPosition(steer.element()) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+
+  await screen.rerender(view({ canSteer: false }));
+  await expect.element(queue).toBeEnabled();
+  expect(steer.query()).toBeNull();
+
+  await screen.rerender(view({ isRunning: false, canInterrupt: false }));
+  await expect
+    .element(screen.getByRole("button", { name: "Submit message", exact: true }))
+    .toBeEnabled();
+  expect(queue.query()).toBeNull();
+  expect(steer.query()).toBeNull();
+});

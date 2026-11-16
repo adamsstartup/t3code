@@ -2240,6 +2240,22 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     );
   };
   const handleSubmitMessageStable = useStableCallback(handleSubmitMessage);
+  const submitFollowUp = (event: React.MouseEvent<HTMLButtonElement>, mode: "queue" | "steer") => {
+    event.preventDefault();
+    const enterMode = resolveComposerDispatchMode({
+      running: true,
+      alternateModifier: false,
+      activeTurnDefault: followUpBehavior,
+      canSteer,
+    });
+    submitComposer(event, mode, mode === enterMode ? undefined : "alternate");
+  };
+  const handleQueueMessageStable = useStableCallback((event: React.MouseEvent<HTMLButtonElement>) =>
+    submitFollowUp(event, "queue"),
+  );
+  const handleSteerMessageStable = useStableCallback((event: React.MouseEvent<HTMLButtonElement>) =>
+    submitFollowUp(event, "steer"),
+  );
   const submitCitationAndSend = () => {
     return submitComposer(
       undefined,
@@ -3783,6 +3799,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     preserveComposerFocusOnPointerDown={isMobileViewport}
                     isEditingQueuedMessage={isEditingQueuedMessage}
                     onSubmitMessage={handleSubmitMessageStable}
+                    onQueueMessage={handleQueueMessageStable}
+                    onSteerMessage={handleSteerMessageStable}
                     onResume={onResume}
                     onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                     onInterrupt={handleInterruptPrimaryActionStable}
