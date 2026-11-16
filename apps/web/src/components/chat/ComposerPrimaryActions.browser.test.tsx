@@ -235,6 +235,14 @@ it("offers Queue and Steer as separate actions while a turn runs", async () => {
   await expect.element(queue).toBeEnabled();
   expect(steer.query()).toBeNull();
 
+  // A send declines a shown approval, so queueing behind the waiting turn is not offered.
+  await screen.rerender(view({ canQueue: false }));
+  await expect.element(steer).toBeEnabled();
+  expect(queue.query()).toBeNull();
+  // Something must still send when the turn takes no steer either.
+  await screen.rerender(view({ canQueue: false, canSteer: false }));
+  await expect.element(queue).toBeEnabled();
+
   await screen.rerender(view({ isRunning: false, canInterrupt: false }));
   await expect
     .element(screen.getByRole("button", { name: "Submit message", exact: true }))

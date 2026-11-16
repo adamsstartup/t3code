@@ -1,7 +1,10 @@
 import { VoiceInputSetup } from "./VoiceInputSetup";
-import { ComposerSendLaterButton, ComposerSendLaterDialog } from "./ComposerSendLater";
-import { composerScheduledTaskPrefill } from "./composerSendLater.logic";
-import type { ScheduledTaskPrefill } from "../settings/scheduledTasksSettings.logic";
+import { ComposerSendLaterButton } from "./ComposerSendLater";
+import {
+  composerDraftHasNonTextContent,
+  composerScheduledTaskPrefill,
+} from "./composerSendLater.logic";
+import { openComposerSendLater } from "./composerSendLaterRequest";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
 import { insertAttachmentReferencesForDraft } from "./composerAttachmentReferences";
 import type { ComposerAttachmentInsertion } from "../composerAttachmentInsertion";
@@ -1169,11 +1172,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const isComposerApprovalState = activePendingApproval !== null;
   // A send declines the approvals shown here to redirect the agent, so it steers the waiting
   // turn instead of queueing behind it. Approvals the typing guard holds stay unseen and pending.
-  const followUpBehavior = pendingApprovals.some(
+  const approvalShown = pendingApprovals.some(
     (approval) => !heldRequestIds.has(approval.requestId),
-  )
-    ? "steer"
-    : settings.followUpBehavior;
+  );
+  const followUpBehavior = approvalShown ? "steer" : settings.followUpBehavior;
   const composerSuggestionsVisible = composerMenuOpen;
   const composerSuggestionListVisible = composerSuggestionsVisible && composerMenuItems.length > 0;
   const activePendingUserInput = pendingUserInputs[0] ?? null;
@@ -1235,12 +1237,33 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     : null;
   const showResumeAction =
     canResume && !composerDraftHasUserContent(composerDraft) && !isEditingQueuedMessage;
-  const [sendLaterPrefill, setSendLaterPrefill] = useState<ScheduledTaskPrefill | null>(null);
+  // The prompt ref and cursor belong to the draft on screen, which may no longer be the scheduled one.
+  const resetEditorAfterScheduling = (scheduledTargetKey: string) => {
+    if (scheduledTargetKey !== composerDraftTargetKey) return;
+    promptRef.current = "";
+    composerRef.current?.resetCursorState();
+  };
+  const resetEditorAfterSchedulingStable = useStableCallback(resetEditorAfterScheduling);
   const openSendLater = () => {
     if (activeProjectId === null) return;
+    // An attachment still on its way in would land after the task took the text, and be lost.
+    if (
+      countPreparingComposerImages(attachmentTargetKey) > 0 ||
+      pendingDraftWork.has(attachmentTargetKey)
+    ) {
+      toastManager.add({
+        type: "info",
+        title: "Still bringing an attachment into this message.",
+        description: "Scheduled tasks are text only. Remove it once it appears, then try again.",
+      });
+      return;
+    }
     const scheduledThreadId = routeKind === "server" ? activeThreadId : null;
-    setSendLaterPrefill(
-      composerScheduledTaskPrefill({
+    const scheduledTargetKey = composerDraftTargetKey;
+    openComposerSendLater({
+      environmentId,
+      target: composerDraftTarget,
+      prefill: composerScheduledTaskPrefill({
         prompt: promptRef.current,
         projectId: activeProjectId,
         modelSelection: selectedModelSelection,
@@ -1251,15 +1274,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             ? useComposerDraftStore.getState().getDraftThread(composerDraftTarget)
             : null,
       }),
-    );
+      onScheduled: () => resetEditorAfterSchedulingStable(scheduledTargetKey),
+    });
   };
   const openSendLaterStable = useStableCallback(openSendLater);
-  // The task took the prompt, so the composer lets go of it as a send would.
-  const clearScheduledPrompt = () => {
-    useComposerDraftStore.getState().clearComposerContent(composerDraftTarget);
-    promptRef.current = "";
-    composerRef.current?.resetCursorState();
-  };
   const collapsedComposerPrimaryActionDisabled =
     phase === "running" ||
     isSendBusy ||
@@ -3802,6 +3820,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     runId={activeThread?.runtime?.activeRunId ?? null}
                     followUpBehavior={followUpBehavior}
                     canSteer={canSteer}
+                    canQueue={!approvalShown}
                     alternateShortcutLabel={shortcutLabelForCommand(
                       keybindings,
                       "composer.sendAlternate",
@@ -3837,14 +3856,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
                   >
-                    {sendLaterPrefill !== null ? (
-                      <ComposerSendLaterDialog
-                        environmentId={environmentId}
-                        prefill={sendLaterPrefill}
-                        onScheduled={clearScheduledPrompt}
-                        onClose={() => setSendLaterPrefill(null)}
-                      />
-                    ) : null}
                     <ComposerSendLaterButton
                       environmentId={environmentId}
                       hidden={
@@ -3855,15 +3866,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         dictationTakesFooter
                       }
                       promptHasText={prompt.trim().length > 0}
-                      hasNonTextContent={
-                        composerImages.length + composerFiles.length > 0 ||
-                        composerDraft.persistedAttachments.length > 0 ||
-                        composerTerminalContexts.length > 0 ||
-                        composerPreviewAnnotations.length > 0 ||
-                        composerReviewComments.length > 0 ||
-                        composerThreadContexts.length > 0 ||
-                        composerEnvironmentContexts.length > 0
-                      }
+                      hasNonTextContent={composerDraftHasNonTextContent(composerDraft)}
                       environmentAvailable={environmentUnavailable === null}
                       dictating={voiceInputActive}
                       onOpen={openSendLaterStable}

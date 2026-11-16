@@ -1,6 +1,10 @@
 import type { ModelSelection, ProjectId, RuntimeMode, ThreadId } from "@t3tools/contracts";
 
-import type { DraftThreadState } from "../../composerDraftStore";
+import {
+  composerDraftHasUserContent,
+  type ComposerThreadDraftState,
+  type DraftThreadState,
+} from "../../composerDraftStore";
 import type { ScheduledTaskPrefill } from "../settings/scheduledTasksSettings.logic";
 
 /** Long enough to tell tasks apart in the list, short enough to stay on one row. */
@@ -58,6 +62,13 @@ export function composerScheduledTaskPrefill(input: {
           ...(input.draft ? checkoutPrefill(input.draft) : {}),
         }),
   };
+}
+
+/** Attachments, context chips, or a reply: everything a draft holds besides its prompt text. */
+export function composerDraftHasNonTextContent(
+  draft: ComposerThreadDraftState | null | undefined,
+): boolean {
+  return draft ? composerDraftHasUserContent({ ...draft, prompt: "" }) : false;
 }
 
 export type ComposerSendLaterState =

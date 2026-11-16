@@ -1,16 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId, ScheduledTask } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { CalendarClockIcon } from "lucide-react";
 import { memo, type PointerEventHandler } from "react";
 
-import { ScheduledTaskEditorDialog } from "../settings/ScheduledTasksSettings";
-import { SettingsScopeProvider } from "../settings/SettingsScopeContext";
-import { scheduleLabel, type ScheduledTaskPrefill } from "../settings/scheduledTasksSettings.logic";
-import type { SettingsScopeSearch } from "../settings/settingsScope";
 import { serverEnvironment } from "../../state/server";
 import { Button } from "../ui/button";
-import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { composerSendLaterState } from "./composerSendLater.logic";
 
@@ -60,46 +54,3 @@ export const ComposerSendLaterButton = memo(function ComposerSendLaterButton(pro
     </Tooltip>
   );
 });
-
-// The editor lists projects through the settings scope; outside Settings that is every environment.
-const EVERY_ENVIRONMENT: SettingsScopeSearch = {};
-const ignoreScopeChange = () => {};
-
-/** The scheduled task editor, opened from the composer with its contents filled in. */
-export function ComposerSendLaterDialog(props: {
-  readonly environmentId: EnvironmentId;
-  readonly prefill: ScheduledTaskPrefill;
-  /** Runs once the task is saved, so the composer can clear what it handed over. */
-  readonly onScheduled: () => void;
-  readonly onClose: () => void;
-}) {
-  const navigate = useNavigate();
-  const { environmentId, onScheduled } = props;
-  const announce = (task: ScheduledTask) => {
-    onScheduled();
-    toastManager.add({
-      type: "success",
-      title: "Scheduled",
-      description: `${task.title} · ${scheduleLabel(task.schedule)}`,
-      actionProps: {
-        children: "View task",
-        onClick: () =>
-          void navigate({
-            to: "/settings/scheduled-tasks",
-            search: { environmentId, taskId: task.id },
-          }),
-      },
-    });
-  };
-  return (
-    <SettingsScopeProvider search={EVERY_ENVIRONMENT} onChange={ignoreScopeChange}>
-      <ScheduledTaskEditorDialog
-        initialEnvironmentId={environmentId}
-        task={null}
-        prefill={props.prefill}
-        onSaved={announce}
-        onClose={props.onClose}
-      />
-    </SettingsScopeProvider>
-  );
-}

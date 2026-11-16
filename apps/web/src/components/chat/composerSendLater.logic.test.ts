@@ -1,7 +1,10 @@
 import { ProjectId, ProviderInstanceId, ThreadId, type ModelSelection } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { DraftId, useComposerDraftStore } from "../../composerDraftStore";
+
 import {
+  composerDraftHasNonTextContent,
   composerScheduledTaskPrefill,
   composerSendLaterState,
   scheduledTaskTitleFromPrompt,
@@ -112,6 +115,26 @@ describe("composerScheduledTaskPrefill", () => {
     expect(prefill).toMatchObject({ threadId: "thread-1", threadMode: "continue" });
     expect(prefill).not.toHaveProperty("workspaceMode");
     expect(prefill).not.toHaveProperty("existingWorktreePath");
+  });
+});
+
+describe("composerDraftHasNonTextContent", () => {
+  const target = DraftId.make("send-later-content");
+  useComposerDraftStore.getState().setPrompt(target, "Tidy the notes");
+  const draft = useComposerDraftStore.getState().getComposerDraft(target)!;
+
+  it("ignores the prompt text itself", () => {
+    expect(composerDraftHasNonTextContent(draft)).toBe(false);
+    expect(composerDraftHasNonTextContent(null)).toBe(false);
+  });
+
+  it("counts a reply, which a scheduled task cannot carry", () => {
+    expect(
+      composerDraftHasNonTextContent({
+        ...draft,
+        replyTo: {} as unknown as NonNullable<typeof draft.replyTo>,
+      }),
+    ).toBe(true);
   });
 });
 

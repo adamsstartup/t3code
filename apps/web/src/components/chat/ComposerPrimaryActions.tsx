@@ -42,6 +42,8 @@ interface ComposerPrimaryActionsProps {
   runId?: string | null;
   followUpBehavior?: "queue" | "steer";
   canSteer?: boolean;
+  /** False while a shown approval waits: a send declines it, so it cannot wait behind the turn. */
+  canQueue?: boolean;
   alternateShortcutLabel?: string | null;
   /** Dictation is running; Send finishes it and submits once the transcript lands. */
   voiceInputActive?: boolean;
@@ -243,6 +245,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   runId = null,
   followUpBehavior = "steer",
   canSteer = true,
+  canQueue = true,
   alternateShortcutLabel = null,
   voiceInputActive = false,
   isSendBusy,
@@ -496,7 +499,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
 
   const submit = splitsFollowUp ? (
     <>
-      {followUpButton("queue")}
+      {canQueue || !canSteer ? followUpButton("queue") : null}
       {canSteer ? followUpButton("steer") : null}
     </>
   ) : (

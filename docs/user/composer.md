@@ -64,8 +64,11 @@ See [images and videos](#images-and-videos-in-messages) for previewing and savin
 
 On web and desktop, type a prompt and choose **Send later** in the composer to run
 it once at a set time or on a repeating schedule. The scheduled task form opens
-with your prompt, project, model, and checkout filled in. From an existing thread,
-the task continues that thread; from a new thread, each run starts its own.
+with your prompt filled in. From a new thread it also takes the composer's project,
+model, access mode, and checkout, and each run starts its own thread. From an
+existing thread, the task continues that thread with the model and access mode the
+thread already has; a change you made in the composer but have not sent does not
+apply.
 Scheduled tasks carry text only, so remove attachments and context first. Manage
 saved tasks in **Settings → Scheduled tasks**.
 
