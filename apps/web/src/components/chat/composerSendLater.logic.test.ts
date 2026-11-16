@@ -18,7 +18,6 @@ const base = {
   projectId: ProjectId.make("project-1"),
   modelSelection,
   runtimeMode: "full-access",
-  interactionMode: "default",
   threadId: null,
   draft: null,
 } as const;
@@ -51,8 +50,11 @@ describe("composerScheduledTaskPrefill", () => {
       modelKey: "claude:claude-opus",
       baseModelSelection: modelSelection,
       runtimeMode: "full-access",
-      interactionMode: "default",
     });
+  });
+
+  it("leaves the interaction mode to the form, since the composer does not pick one", () => {
+    expect(composerScheduledTaskPrefill(base)).not.toHaveProperty("interactionMode");
   });
 
   it("maps a draft that creates a worktree, keeping its base branch", () => {

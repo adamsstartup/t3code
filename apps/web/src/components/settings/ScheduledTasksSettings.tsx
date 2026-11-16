@@ -1154,7 +1154,7 @@ function WebhookDeliveryMode({ environmentId }: { readonly environmentId: Enviro
 }
 
 /** Reads the settings scope, so a caller outside Settings wraps it in a SettingsScopeProvider. */
-function ScheduledTaskEditorDialog({
+export function ScheduledTaskEditorDialog({
   initialEnvironmentId,
   task,
   prefill,

@@ -1,10 +1,4 @@
-import type {
-  ModelSelection,
-  ProjectId,
-  ProviderInteractionMode,
-  RuntimeMode,
-  ThreadId,
-} from "@t3tools/contracts";
+import type { ModelSelection, ProjectId, RuntimeMode, ThreadId } from "@t3tools/contracts";
 
 import type { DraftThreadState } from "../../composerDraftStore";
 import type { ScheduledTaskPrefill } from "../settings/scheduledTasksSettings.logic";
@@ -44,7 +38,6 @@ export function composerScheduledTaskPrefill(input: {
   readonly projectId: ProjectId;
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
-  readonly interactionMode: ProviderInteractionMode;
   /** Set for an existing thread; null for a draft. */
   readonly threadId: ThreadId | null;
   /** The draft's checkout choice. An existing thread keeps its own checkout. */
@@ -58,7 +51,6 @@ export function composerScheduledTaskPrefill(input: {
     modelKey: `${input.modelSelection.instanceId}:${input.modelSelection.model}`,
     baseModelSelection: input.modelSelection,
     runtimeMode: input.runtimeMode,
-    interactionMode: input.interactionMode,
     ...(input.threadId !== null
       ? { threadId: input.threadId, threadMode: "continue" as const }
       : {

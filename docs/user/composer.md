@@ -60,12 +60,24 @@ in split screen.
 
 See [images and videos](#images-and-videos-in-messages) for previewing and saving media.
 
+## Send later
+
+On web and desktop, type a prompt and choose **Send later** in the composer to run
+it once at a set time or on a repeating schedule. The scheduled task form opens
+with your prompt, project, model, and checkout filled in. From an existing thread,
+the task continues that thread; from a new thread, each run starts its own.
+Scheduled tasks carry text only, so remove attachments and context first. Manage
+saved tasks in **Settings → Scheduled tasks**.
+
 ## Send while the agent is working
 
 On web and desktop, choose **Settings → Chat → Follow-up behavior** to queue
 new messages for a later turn or steer the running turn immediately. The setting
 applies to this client; already queued messages keep their place. Queued messages
 are saved on the server and can be edited or removed before they send.
+While a turn runs, the composer has separate **Queue** and **Steer** buttons, so
+either action is one click whatever the setting; the setting decides which one
+Enter uses.
 When Enter sends, `Cmd+Enter` on macOS or `Ctrl+Enter` on Windows and Linux uses
 the opposite action: it steers when your default is Queue and queues when your
 default is Steer.

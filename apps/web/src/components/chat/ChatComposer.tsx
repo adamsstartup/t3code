@@ -1,4 +1,7 @@
 import { VoiceInputSetup } from "./VoiceInputSetup";
+import { ComposerSendLaterButton, ComposerSendLaterDialog } from "./ComposerSendLater";
+import { composerScheduledTaskPrefill } from "./composerSendLater.logic";
+import type { ScheduledTaskPrefill } from "../settings/scheduledTasksSettings.logic";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
 import { insertAttachmentReferencesForDraft } from "./composerAttachmentReferences";
 import type { ComposerAttachmentInsertion } from "../composerAttachmentInsertion";
@@ -1232,6 +1235,31 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     : null;
   const showResumeAction =
     canResume && !composerDraftHasUserContent(composerDraft) && !isEditingQueuedMessage;
+  const [sendLaterPrefill, setSendLaterPrefill] = useState<ScheduledTaskPrefill | null>(null);
+  const openSendLater = () => {
+    if (activeProjectId === null) return;
+    const scheduledThreadId = routeKind === "server" ? activeThreadId : null;
+    setSendLaterPrefill(
+      composerScheduledTaskPrefill({
+        prompt: promptRef.current,
+        projectId: activeProjectId,
+        modelSelection: selectedModelSelection,
+        runtimeMode: compatibleRuntimeMode,
+        threadId: scheduledThreadId,
+        draft:
+          scheduledThreadId === null
+            ? useComposerDraftStore.getState().getDraftThread(composerDraftTarget)
+            : null,
+      }),
+    );
+  };
+  const openSendLaterStable = useStableCallback(openSendLater);
+  // The task took the prompt, so the composer lets go of it as a send would.
+  const clearScheduledPrompt = () => {
+    useComposerDraftStore.getState().clearComposerContent(composerDraftTarget);
+    promptRef.current = "";
+    composerRef.current?.resetCursorState();
+  };
   const collapsedComposerPrimaryActionDisabled =
     phase === "running" ||
     isSendBusy ||
@@ -3809,6 +3837,37 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
                   >
+                    {sendLaterPrefill !== null ? (
+                      <ComposerSendLaterDialog
+                        environmentId={environmentId}
+                        prefill={sendLaterPrefill}
+                        onScheduled={clearScheduledPrompt}
+                        onClose={() => setSendLaterPrefill(null)}
+                      />
+                    ) : null}
+                    <ComposerSendLaterButton
+                      environmentId={environmentId}
+                      hidden={
+                        pendingPrimaryAction !== null ||
+                        showResumeAction ||
+                        isEditingQueuedMessage ||
+                        activeProjectId === null ||
+                        dictationTakesFooter
+                      }
+                      promptHasText={prompt.trim().length > 0}
+                      hasNonTextContent={
+                        composerImages.length + composerFiles.length > 0 ||
+                        composerDraft.persistedAttachments.length > 0 ||
+                        composerTerminalContexts.length > 0 ||
+                        composerPreviewAnnotations.length > 0 ||
+                        composerReviewComments.length > 0 ||
+                        composerThreadContexts.length > 0 ||
+                        composerEnvironmentContexts.length > 0
+                      }
+                      environmentAvailable={environmentUnavailable === null}
+                      dictating={voiceInputActive}
+                      onOpen={openSendLaterStable}
+                    />
                     {speechInput.available ? (
                       <>
                         <ComposerSpeechRecordingPill
