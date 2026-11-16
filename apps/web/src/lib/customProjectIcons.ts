@@ -76,17 +76,15 @@ const projectIconNodes: Record<string, IconNode> = {
     ["path", { d: "M8.5 12h7", key: "5" }],
   ],
   "no-project": [
+    ["path", { d: "m2 2 20 20", key: "0" }],
+    ["path", { d: "M2 5.5V18a2 2 0 0 0 2 2h13.5", key: "1" }],
     [
       "path",
-      { d: "M2 9V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.67.9l.81 1.2a2 2 0 0 0 1.69.9H13", key: "0" },
+      {
+        d: "M6.5 3h1.43a2 2 0 0 1 1.67.9l.81 1.2a2 2 0 0 0 1.69.9H20a2 2 0 0 1 2 2v10.5",
+        key: "2",
+      },
     ],
-    ["path", { d: "M17 6h3a2 2 0 0 1 2 2v1", key: "1" }],
-    ["path", { d: "M22 13v1", key: "2" }],
-    ["path", { d: "M22 18a2 2 0 0 1-2 2h-1", key: "3" }],
-    ["path", { d: "M14 20h1", key: "4" }],
-    ["path", { d: "M9 20h1", key: "5" }],
-    ["path", { d: "M5 20H4a2 2 0 0 1-2-2", key: "6" }],
-    ["path", { d: "M2 13v1", key: "7" }],
   ],
 };
 
@@ -230,6 +228,10 @@ const spareIconNodes: Record<string, IconNode> = {
     ["path", { d: "m4 13 2.5 2.5", key: "2" }],
   ],
   maze: [["path", { d: "M3 21V3h18v18H7V7h10v10h-6v-6", key: "0" }]],
+  "quick-chat": [
+    ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "0" }],
+    ["path", { d: "m12.5 6-3 4h5l-3 4", key: "1" }],
+  ],
 };
 
 export const customProjectIcons: ReadonlyMap<string, LucideIcon> = new Map(

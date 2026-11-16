@@ -15,8 +15,8 @@ describe("projectIconOptions", () => {
   });
 
   it("offers each custom icon once, under a name Lucide does not use", () => {
-    expect(customProjectIconNames).toHaveLength(31);
-    expect(filterProjectIconNames("").slice(0, 31)).toEqual(customProjectIconNames);
+    expect(customProjectIconNames).toHaveLength(32);
+    expect(filterProjectIconNames("").slice(0, 32)).toEqual(customProjectIconNames);
     expect(filterProjectIconNames("void")).toEqual(["void", "void-web"]);
     const offered = lucideIconNames.filter((name) => customProjectIconNames.includes(name));
     expect(offered).toEqual(customProjectIconNames);
